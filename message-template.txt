@@ -1,0 +1,26 @@
+Hi {{name}},
+
+Greetings from 176 Avenue @ BANGSAR! ✨
+
+This is a friendly reminder of your upcoming appointment:
+
+📅 Date: {{day}}, {{date}}
+⏰ Time: {{time}}
+💇 Service: {{service}}
+
+To secure your slot, kindly reply:
+✔ Y – to confirm
+❌ NO – to cancel
+
+⏰ Please confirm. Unconfirmed slots may be released to clients on our waitlist.
+
+Location Reminder:
+🏢 176 Avenue @ BANGSAR 
+📍 https://bit.ly/176BangsarLOC
+
+📣 As our stylists have limited availability during this period, your confirmation is greatly appreciated.
+
+Thank you, and have a wonderful day! 😊
+
+Warm regards,
+176 Avenue ✨
