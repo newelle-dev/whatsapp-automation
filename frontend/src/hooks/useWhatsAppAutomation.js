@@ -3,6 +3,13 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 
 const DEFAULT_TEMPLATE = 'Hello {{name}}, this is a reminder for {{service}} on {{date}} at {{time}}.';
+const LAST_VISIT_DEFAULT_TEMPLATE = `Hi {{name}},
+
+We're just checking in to see how your recent service experience was. We hope you're enjoying the results 😊
+
+If you're planning your next visit, we'd be happy to assist with an advance booking for your convenience.
+
+Feel free to share your preferred date and time, and we can also update you on any ongoing promotions.`;
 const DEFAULT_PREVIEW_DATA = {
   displayName: 'Alex Morgan',
   service: 'Appointment',
@@ -15,6 +22,7 @@ const socket = io('http://localhost:3000');
 
 export const useWhatsAppAutomation = () => {
   const [step, setStep] = useState(1);
+  const [campaignMode, setCampaignMode] = useState('appointments');
   const [clientsFile, setClientsFile] = useState(null);
   const [apptsFile, setApptsFile] = useState(null);
   const [showClientUploadModal, setShowClientUploadModal] = useState(false);
@@ -55,13 +63,17 @@ export const useWhatsAppAutomation = () => {
   const loadTemplate = async () => {
     setTemplateLoading(true);
     setTemplateError('');
+    const isLastVisitCampaign = campaignMode === 'last-visit';
+    const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
 
     try {
-      const res = await axios.get('http://localhost:3000/api/template');
-      setTemplateContent(res.data.template || DEFAULT_TEMPLATE);
+      const res = await axios.get('http://localhost:3000/api/template', {
+        params: { campaign: isLastVisitCampaign ? 'last-visit' : 'appointments' }
+      });
+      setTemplateContent(res.data.template || fallbackTemplate);
     } catch (err) {
       setTemplateError(err.response?.data?.error || 'Failed to load message template.');
-      setTemplateContent(DEFAULT_TEMPLATE);
+      setTemplateContent(fallbackTemplate);
     } finally {
       setTemplateLoading(false);
     }
@@ -80,9 +92,13 @@ export const useWhatsAppAutomation = () => {
   const saveTemplate = async (nextTemplate) => {
     setTemplateSaving(true);
     setTemplateError('');
+    const isLastVisitCampaign = campaignMode === 'last-visit';
 
     try {
-      const res = await axios.post('http://localhost:3000/api/template', { template: nextTemplate });
+      const res = await axios.post('http://localhost:3000/api/template', {
+        template: nextTemplate,
+        campaign: isLastVisitCampaign ? 'last-visit' : 'appointments'
+      });
       setTemplateContent(res.data.template || nextTemplate);
 
       if (Array.isArray(res.data.sendingQueue) || Array.isArray(res.data.manualReviewQueue)) {
@@ -105,10 +121,15 @@ export const useWhatsAppAutomation = () => {
   const resetTemplate = async () => {
     setTemplateSaving(true);
     setTemplateError('');
+    const isLastVisitCampaign = campaignMode === 'last-visit';
+    const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
 
     try {
-      const res = await axios.post('http://localhost:3000/api/template', { template: DEFAULT_TEMPLATE });
-      setTemplateContent(res.data.template || DEFAULT_TEMPLATE);
+      const res = await axios.post('http://localhost:3000/api/template', {
+        template: fallbackTemplate,
+        campaign: isLastVisitCampaign ? 'last-visit' : 'appointments'
+      });
+      setTemplateContent(res.data.template || fallbackTemplate);
 
       if (Array.isArray(res.data.sendingQueue) || Array.isArray(res.data.manualReviewQueue)) {
         setQueues({
@@ -128,13 +149,21 @@ export const useWhatsAppAutomation = () => {
 
   const handleFileUpload = async (reprocessFile = null) => {
     const fileToUpload = reprocessFile || apptsFile;
-    if (!fileToUpload) return alert("Please select an appointments file.");
+    if (!fileToUpload) {
+      const requiredFileLabel = campaignMode === 'last-visit' ? 'Last Visit.csv' : 'appointments file';
+      return alert(`Please select a ${requiredFileLabel}.`);
+    }
     
     const formData = new FormData();
-    formData.append('appointmentsCsv', fileToUpload);
+    const isLastVisitCampaign = campaignMode === 'last-visit';
+    formData.append(isLastVisitCampaign ? 'lastVisitCsv' : 'appointmentsCsv', fileToUpload);
 
     try {
-      const res = await axios.post('http://localhost:3000/api/upload', formData);
+      const endpoint = isLastVisitCampaign
+        ? 'http://localhost:3000/api/upload-last-visit'
+        : 'http://localhost:3000/api/upload';
+
+      const res = await axios.post(endpoint, formData);
       setQueues(res.data);
       
       if (res.data.manualReviewQueue && res.data.manualReviewQueue.length > 0) {
@@ -211,6 +240,7 @@ export const useWhatsAppAutomation = () => {
 
   return {
     step, setStep,
+    campaignMode, setCampaignMode,
     clientsFile, setClientsFile,
     apptsFile, setApptsFile,
     showClientUploadModal, setShowClientUploadModal,

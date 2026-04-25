@@ -12,10 +12,15 @@ const { formatPhone } = require('./utils/formatter');
 const { 
     readClients, // This is still needed for parsing CSV, but the storage will be separate
     processAppointments, 
+    processLastVisitCampaign,
     prepareTemplate,
+    prepareLastVisitTemplate,
     readTemplate,
     writeTemplate,
-    TEMPLATE_FILE 
+    TEMPLATE_FILE,
+    LAST_VISIT_TEMPLATE_FILE,
+    LAST_VISIT_DEFAULT_TEMPLATE,
+    DEFAULT_TEMPLATE
 } = require('./services/csvProcessor');
 const { readClientData, writeClientData } = require('./services/clientDataStore'); // New import
 
@@ -64,6 +69,13 @@ const sleep = (min = 15000, max = 45000) => {
     const ms = Math.floor(Math.random() * (max - min + 1) + min);
     return new Promise(resolve => setTimeout(resolve, ms));
 };
+
+function buildMessageForItem(item) {
+    if (item?.source === 'last-visit') {
+        return prepareLastVisitTemplate(item, LAST_VISIT_TEMPLATE_FILE);
+    }
+    return prepareTemplate(item, TEMPLATE_FILE);
+}
 
 // Emits socket event
 function addLog(msg) {
@@ -116,7 +128,10 @@ app.delete('/api/clients', async (req, res) => {
 
 app.get('/api/template', (req, res) => {
     try {
-        const template = readTemplate(TEMPLATE_FILE);
+        const campaign = req.query.campaign === 'last-visit' ? 'last-visit' : 'appointments';
+        const templateFile = campaign === 'last-visit' ? LAST_VISIT_TEMPLATE_FILE : TEMPLATE_FILE;
+        const fallbackTemplate = campaign === 'last-visit' ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
+        const template = readTemplate(templateFile) || fallbackTemplate;
         res.json({ template });
     } catch (err) {
         res.status(500).json({ error: 'Failed to load message template.' });
@@ -125,29 +140,32 @@ app.get('/api/template', (req, res) => {
 
 app.post('/api/template', async (req, res) => {
     try {
-        const { template } = req.body;
+        const { template, campaign } = req.body;
+        const campaignType = campaign === 'last-visit' ? 'last-visit' : 'appointments';
+        const templateFile = campaignType === 'last-visit' ? LAST_VISIT_TEMPLATE_FILE : TEMPLATE_FILE;
 
         if (typeof template !== 'string') {
             return res.status(400).json({ error: 'Template must be a string.' });
         }
 
-        await writeTemplate(template, TEMPLATE_FILE);
+        await writeTemplate(template, templateFile);
 
         // Refresh queued message previews so UI reflects the latest template immediately.
         sendingQueue = sendingQueue.map((item) => ({
             ...item,
-            message: prepareTemplate(item, TEMPLATE_FILE)
+            message: buildMessageForItem(item)
         }));
 
         manualReviewQueue = manualReviewQueue.map((item) => ({
             ...item,
-            message: prepareTemplate(item, TEMPLATE_FILE)
+            message: buildMessageForItem(item)
         }));
 
         addLog('Message template updated successfully.');
         res.json({
             message: 'Template updated successfully.',
             template,
+            campaign: campaignType,
             sendingQueue,
             manualReviewQueue
         });
@@ -178,7 +196,7 @@ app.post('/api/resolve-issues', async (req, res) => {
             const phone = resolvedMap.get(item.name);
             if (phone) {
                 item.phone = phone;
-                item.message = prepareTemplate(item, TEMPLATE_FILE);
+                item.message = buildMessageForItem(item);
                 sendingQueue.push(item);
             } else {
                 stillUnresolved.push(item);
@@ -227,7 +245,7 @@ app.post('/api/upload', upload.single('appointmentsCsv'), async (req, res) => {
         
         sendingQueue = processed.sendingQueue.map(item => ({
             ...item,
-            message: prepareTemplate(item, TEMPLATE_FILE)
+            message: buildMessageForItem(item)
         }));
         manualReviewQueue = processed.manualReviewQueue;
 
@@ -246,6 +264,43 @@ app.post('/api/upload', upload.single('appointmentsCsv'), async (req, res) => {
         console.error('Error uploading appointments CSV:', err);
         if (req.file) try { fs.unlinkSync(req.file.path); } catch(e) {}
         res.status(500).json({ error: 'Failed to upload appointments CSV.' });
+    }
+});
+
+app.post('/api/upload-last-visit', upload.single('lastVisitCsv'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'Last Visit CSV file is required.' });
+        }
+
+        const processed = await processLastVisitCampaign(req.file.path);
+
+        sendingQueue = processed.sendingQueue.map(item => ({
+            ...item,
+            message: buildMessageForItem(item)
+        }));
+        manualReviewQueue = processed.manualReviewQueue.map(item => ({
+            ...item,
+            message: buildMessageForItem(item)
+        }));
+
+        try {
+            fs.unlinkSync(req.file.path);
+        } catch (unlinkErr) {
+            console.error('Error deleting temp file:', unlinkErr);
+        }
+
+        addLog(`Processed last-visit campaign with ${sendingQueue.length} sendable customers and ${manualReviewQueue.length} manual review items.`);
+
+        res.json({
+            sendingQueue,
+            manualReviewQueue,
+            campaign: 'last-visit'
+        });
+    } catch (err) {
+        console.error('Error uploading last visit CSV:', err);
+        if (req.file) try { fs.unlinkSync(req.file.path); } catch(e) {}
+        res.status(500).json({ error: 'Failed to process Last Visit CSV.' });
     }
 });
 
@@ -319,21 +374,23 @@ app.post('/api/start-sending', async (req, res) => {
         for (let i = 0; i < sendingQueue.length; i++) {
             const item = sendingQueue[i];
             try {
-                const messageText = prepareTemplate(item, TEMPLATE_FILE);
+                const messageText = buildMessageForItem(item);
                 addLog(`[${i + 1}/${sendingQueue.length}] Sending to ${item.name} (${item.phone})...`);
 
                 await whatsappClient.sendMessage(item.phone, messageText);
 
                 addLog(`Success! Messages sent: ${i + 1}/${sendingQueue.length}`);
+            } catch (error) {
+                addLog(`ERROR: Failed to send to ${item.name} (${item.phone}) - ${error.message}`);
+                manualReviewQueue.push({ ...item, reason: 'API Error', error: error.message });
+            } finally {
+                // Progress should reflect processed recipients, not only successful sends.
                 io.emit('progress', { current: i + 1, total: sendingQueue.length });
 
                 if (i < sendingQueue.length - 1) {
                     addLog('Waiting randomized delay (15s - 45s) to avoid spam flags...');
                     await sleep(15000, 45000);
                 }
-            } catch (error) {
-                addLog(`ERROR: Failed to send to ${item.name} (${item.phone}) - ${error.message}`);
-                manualReviewQueue.push({ ...item, reason: 'API Error', error: error.message });
             }
         }
 

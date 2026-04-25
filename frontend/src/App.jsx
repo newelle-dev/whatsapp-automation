@@ -11,6 +11,7 @@ import './index.css';
 function App() {
   const {
     step,
+    campaignMode, setCampaignMode,
     clientsFile, setClientsFile,
     apptsFile, setApptsFile,
     showClientUploadModal, setShowClientUploadModal,
@@ -51,6 +52,8 @@ function App() {
 
       {step === 1 && (
         <UploadSection 
+          campaignMode={campaignMode}
+          setCampaignMode={setCampaignMode}
           apptsFile={apptsFile}
           setApptsFile={setApptsFile}
           onProcess={() => handleFileUpload()}
