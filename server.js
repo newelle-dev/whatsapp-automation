@@ -13,6 +13,8 @@ const {
     readClients, // This is still needed for parsing CSV, but the storage will be separate
     processAppointments, 
     prepareTemplate,
+    readTemplate,
+    writeTemplate,
     TEMPLATE_FILE 
 } = require('./services/csvProcessor');
 const { readClientData, writeClientData } = require('./services/clientDataStore'); // New import
@@ -109,6 +111,49 @@ app.delete('/api/clients', async (req, res) => {
         res.json({ message: 'Client list cleared successfully.' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to clear client list.' });
+    }
+});
+
+app.get('/api/template', (req, res) => {
+    try {
+        const template = readTemplate(TEMPLATE_FILE);
+        res.json({ template });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to load message template.' });
+    }
+});
+
+app.post('/api/template', async (req, res) => {
+    try {
+        const { template } = req.body;
+
+        if (typeof template !== 'string') {
+            return res.status(400).json({ error: 'Template must be a string.' });
+        }
+
+        await writeTemplate(template, TEMPLATE_FILE);
+
+        // Refresh queued message previews so UI reflects the latest template immediately.
+        sendingQueue = sendingQueue.map((item) => ({
+            ...item,
+            message: prepareTemplate(item, TEMPLATE_FILE)
+        }));
+
+        manualReviewQueue = manualReviewQueue.map((item) => ({
+            ...item,
+            message: prepareTemplate(item, TEMPLATE_FILE)
+        }));
+
+        addLog('Message template updated successfully.');
+        res.json({
+            message: 'Template updated successfully.',
+            template,
+            sendingQueue,
+            manualReviewQueue
+        });
+    } catch (err) {
+        console.error('Error saving message template:', err);
+        res.status(500).json({ error: 'Failed to save message template.' });
     }
 });
 

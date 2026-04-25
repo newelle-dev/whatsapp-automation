@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
+const DEFAULT_TEMPLATE = 'Hello {{name}}, this is a reminder for {{service}} on {{date}} at {{time}}.';
+const DEFAULT_PREVIEW_DATA = {
+  displayName: 'Alex Morgan',
+  service: 'Appointment',
+  time: '10:00 AM',
+  date: 'Monday, April 25, 2026',
+  day: 'Monday'
+};
+
 const socket = io('http://localhost:3000');
 
 export const useWhatsAppAutomation = () => {
@@ -10,6 +19,11 @@ export const useWhatsAppAutomation = () => {
   const [apptsFile, setApptsFile] = useState(null);
   const [showClientUploadModal, setShowClientUploadModal] = useState(false);
   const [showResolveIssuesModal, setShowResolveIssuesModal] = useState(false);
+  const [showTemplateEditorModal, setShowTemplateEditorModal] = useState(false);
+  const [templateContent, setTemplateContent] = useState('');
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateError, setTemplateError] = useState('');
   
   const [queues, setQueues] = useState({ sendingQueue: [], manualReviewQueue: [] });
   const [qrCode, setQrCode] = useState('');
@@ -38,6 +52,80 @@ export const useWhatsAppAutomation = () => {
     };
   }, []);
 
+  const loadTemplate = async () => {
+    setTemplateLoading(true);
+    setTemplateError('');
+
+    try {
+      const res = await axios.get('http://localhost:3000/api/template');
+      setTemplateContent(res.data.template || DEFAULT_TEMPLATE);
+    } catch (err) {
+      setTemplateError(err.response?.data?.error || 'Failed to load message template.');
+      setTemplateContent(DEFAULT_TEMPLATE);
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
+  const openTemplateEditor = async () => {
+    setShowTemplateEditorModal(true);
+    await loadTemplate();
+  };
+
+  const closeTemplateEditor = () => {
+    setShowTemplateEditorModal(false);
+    setTemplateError('');
+  };
+
+  const saveTemplate = async (nextTemplate) => {
+    setTemplateSaving(true);
+    setTemplateError('');
+
+    try {
+      const res = await axios.post('http://localhost:3000/api/template', { template: nextTemplate });
+      setTemplateContent(res.data.template || nextTemplate);
+
+      if (Array.isArray(res.data.sendingQueue) || Array.isArray(res.data.manualReviewQueue)) {
+        setQueues({
+          sendingQueue: res.data.sendingQueue || [],
+          manualReviewQueue: res.data.manualReviewQueue || []
+        });
+      }
+
+      setShowTemplateEditorModal(false);
+      alert(res.data.message || 'Template updated successfully.');
+    } catch (err) {
+      setTemplateError(err.response?.data?.error || 'Failed to save message template.');
+      alert('Template save failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const resetTemplate = async () => {
+    setTemplateSaving(true);
+    setTemplateError('');
+
+    try {
+      const res = await axios.post('http://localhost:3000/api/template', { template: DEFAULT_TEMPLATE });
+      setTemplateContent(res.data.template || DEFAULT_TEMPLATE);
+
+      if (Array.isArray(res.data.sendingQueue) || Array.isArray(res.data.manualReviewQueue)) {
+        setQueues({
+          sendingQueue: res.data.sendingQueue || [],
+          manualReviewQueue: res.data.manualReviewQueue || []
+        });
+      }
+    } catch (err) {
+      setTemplateError(err.response?.data?.error || 'Failed to reset message template.');
+      alert('Template reset failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const templatePreviewData = queues.sendingQueue[0] || queues.manualReviewQueue[0] || DEFAULT_PREVIEW_DATA;
+
   const handleFileUpload = async (reprocessFile = null) => {
     const fileToUpload = reprocessFile || apptsFile;
     if (!fileToUpload) return alert("Please select an appointments file.");
@@ -63,14 +151,9 @@ export const useWhatsAppAutomation = () => {
     try {
       const res = await axios.post('http://localhost:3000/api/resolve-issues', { resolved: resolvedClients });
       setQueues(res.data);
+      // Close the modal and proceed to preview even if some items remain unresolved.
       setShowResolveIssuesModal(false);
-      
-      // If there are still unresolved issues, keep the modal open
-      if (res.data.manualReviewQueue && res.data.manualReviewQueue.length > 0) {
-        setShowResolveIssuesModal(true);
-      } else {
-        setStep(2);
-      }
+      setStep(2);
     } catch (err) {
       alert("Failed to save phone numbers: " + (err.response?.data?.error || err.message));
     }
@@ -132,6 +215,16 @@ export const useWhatsAppAutomation = () => {
     apptsFile, setApptsFile,
     showClientUploadModal, setShowClientUploadModal,
     showResolveIssuesModal, setShowResolveIssuesModal,
+    showTemplateEditorModal,
+    templateContent,
+    templateLoading,
+    templateSaving,
+    templateError,
+    templatePreviewData,
+    openTemplateEditor,
+    closeTemplateEditor,
+    saveTemplate,
+    resetTemplate,
     queues, qrCode, authStatus, progress, logs,
     handleFileUpload,
     handleClientFileUpload,

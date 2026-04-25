@@ -13,13 +13,8 @@ export default function ResolveIssuesModal({ issues, onSubmit, onCancel }) {
     const resolved = Object.entries(phoneInputs)
       .filter(([name, phone]) => phone.trim() !== '')
       .map(([name, phone]) => ({ name, phone }));
-      
-    // Force the user to resolve all issues before they can preview
-    if (resolved.length < issues.length) {
-      alert("Please provide a phone number for all clients listed.");
-      return;
-    }
     
+    // Proceed even if some inputs are left blank
     onSubmit(resolved);
   };
 
@@ -31,7 +26,7 @@ export default function ResolveIssuesModal({ issues, onSubmit, onCancel }) {
         </h2>
         <p style={{ marginBottom: '1.5rem' }}>
           Some appointments are missing valid phone numbers or have multiple numbers associated (collisions). 
-          <strong> You must provide a valid phone number for all of them before proceeding.</strong>
+          <strong> You may provide a phone number for any of them, but it's optional — you can proceed without filling them all.</strong>
         </p>
         
         <div style={{ maxHeight: '400px', overflowY: 'auto', margin: '1rem 0', paddingRight: '1rem' }}>

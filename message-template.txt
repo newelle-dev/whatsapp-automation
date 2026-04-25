@@ -1,6 +1,6 @@
 Hi {{name}},
 
-Greetings from 176 Avenue @ BANGSAR! ✨
+Greetings from 176 Avenue @ BANGSAR✨
 
 This is a friendly reminder of your upcoming appointment:
 
@@ -20,7 +20,7 @@ Location Reminder:
 
 📣 As our stylists have limited availability during this period, your confirmation is greatly appreciated.
 
-Thank you, and have a wonderful day! 😊
+Thank you and have a wonderful day! 😊
 
 Warm regards,
 176 Avenue ✨

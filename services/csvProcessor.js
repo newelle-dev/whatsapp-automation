@@ -4,6 +4,7 @@ const path = require('path');
 const { simplifyService, parseTimeStr, formatPhone } = require('../utils/formatter');
 
 const TEMPLATE_FILE = path.join(__dirname, '..', 'message-template.txt');
+const DEFAULT_TEMPLATE = 'Hello {{name}}, this is a reminder for {{service}} on {{date}} at {{time}}.';
 const NAME_COL = 'Full Name';
 const PHONE_COL = 'Mobile Number';
 const APP_NAME_COL = 'Client';
@@ -125,7 +126,12 @@ function processAppointments(filePath, clientMap) {
 
 function prepareTemplate(payload, templateFile) {
     if (!fs.existsSync(templateFile)) {
-        return `Hello ${payload.displayName}, this is a reminder for ${payload.service} on ${payload.date} at ${payload.time}.`;
+        return DEFAULT_TEMPLATE
+            .replace(/\{\{name\}\}/g, payload.displayName)
+            .replace(/\{\{service\}\}/g, payload.service)
+            .replace(/\{\{time\}\}/g, payload.time)
+            .replace(/\{\{date\}\}/g, payload.date)
+            .replace(/\{\{day\}\}/g, payload.day);
     }
     let template = fs.readFileSync(templateFile, 'utf8');
     template = template.replace(/\{\{name\}\}/g, payload.displayName);
@@ -136,10 +142,25 @@ function prepareTemplate(payload, templateFile) {
     return template;
 }
 
+function readTemplate(templateFile = TEMPLATE_FILE) {
+    if (!fs.existsSync(templateFile)) {
+        return DEFAULT_TEMPLATE;
+    }
+
+    return fs.readFileSync(templateFile, 'utf8');
+}
+
+async function writeTemplate(templateContent, templateFile = TEMPLATE_FILE) {
+    await fs.promises.writeFile(templateFile, templateContent, 'utf8');
+}
+
 module.exports = {
     readClients,
     processAppointments,
     prepareTemplate,
+    readTemplate,
+    writeTemplate,
+    DEFAULT_TEMPLATE,
     TEMPLATE_FILE,
     NAME_COL,
     PHONE_COL,
