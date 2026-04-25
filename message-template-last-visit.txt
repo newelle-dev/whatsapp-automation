@@ -1,0 +1,10 @@
+Hi {{name}},
+
+We're just checking in to see how your recent service experience was. We hope you're enjoying the results 😊
+
+If you're planning your next visit, we'd be happy to assist with an advance booking for your convenience.
+
+Feel free to share your preferred date and time, and we can also update you on any ongoing promotions.
+
+Warm Regards,
+Customer Service @ 176Avenue
