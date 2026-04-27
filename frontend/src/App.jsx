@@ -27,6 +27,8 @@ function App() {
     saveTemplate,
     resetTemplate,
     queues, qrCode, authStatus, progress, logs,
+    updatePreviewName,
+    togglePreviewExclusion,
     handleFileUpload,
     handleClientFileUpload,
     handleClearClients,
@@ -96,6 +98,8 @@ function App() {
         <PreviewSection 
           queues={queues}
           onStartSending={handleStartSending}
+          onEditRecipientName={updatePreviewName}
+          onToggleRecipientExclusion={togglePreviewExclusion}
         />
       )}
 

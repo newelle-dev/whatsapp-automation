@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
@@ -18,6 +18,89 @@ const DEFAULT_PREVIEW_DATA = {
   day: 'Monday'
 };
 
+const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+const createPreviewKey = (item, index) => [
+  item.source || 'appointments',
+  item.phone || '',
+  item.name || '',
+  item.displayName || '',
+  item.service || '',
+  item.time || '',
+  item.date || '',
+  item.day || '',
+  item.branch || '',
+  item.lastVisitDate || '',
+  index
+].map(normalizeText).join('|');
+
+const replaceAllOccurrences = (text, searchText, replacementText) => {
+  if (!text || !searchText) {
+    return text || '';
+  }
+
+  return text.split(searchText).join(replacementText);
+};
+
+const renderPreviewMessage = (item, template) => {
+  const recipientName = normalizeText(item.displayName || item.name || 'Client');
+  const originalRecipientName = normalizeText(item.originalDisplayName || item.originalName || item.name || item.displayName || '');
+
+  if (!template) {
+    return replaceAllOccurrences(item.message || '', originalRecipientName, recipientName) || item.message || '';
+  }
+
+  if (item?.source === 'last-visit') {
+    return template
+      .replace(/\{\{name\}\}/g, recipientName)
+      .replace(/\{\{lastVisitDate\}\}/g, item.lastVisitDate || '')
+      .replace(/\{\{daysSinceVisit\}\}/g, String(item.daysSinceVisit || 7))
+      .replace(/\{\{branch\}\}/g, item.branch || '');
+  }
+
+  return template
+    .replace(/\{\{name\}\}/g, recipientName)
+    .replace(/\{\{service\}\}/g, item.service || 'your appointment')
+    .replace(/\{\{time\}\}/g, item.time || 'the scheduled time')
+    .replace(/\{\{date\}\}/g, item.date || 'the scheduled date')
+    .replace(/\{\{day\}\}/g, item.day || 'the scheduled day');
+};
+
+const stripPreviewMetadata = (item) => {
+  const {
+    previewKey,
+    originalDisplayName,
+    originalName,
+    isExcluded,
+    ...payload
+  } = item;
+
+  return payload;
+};
+
+const applyPreviewState = (queues, templateContent, previewEdits) => {
+  const decorateItem = (item, index) => {
+    const previewKey = item.previewKey || createPreviewKey(item, index);
+    const edit = previewEdits[previewKey] || {};
+    const nextItem = {
+      ...item,
+      previewKey,
+      originalDisplayName: item.originalDisplayName || item.displayName || item.name || '',
+      originalName: item.originalName || item.name || item.displayName || '',
+      displayName: edit.name ? edit.name : (item.displayName || item.name || ''),
+      isExcluded: Boolean(edit.excluded)
+    };
+
+    nextItem.message = renderPreviewMessage(nextItem, templateContent);
+    return nextItem;
+  };
+
+  return {
+    sendingQueue: (queues.sendingQueue || []).map(decorateItem),
+    manualReviewQueue: (queues.manualReviewQueue || []).map(decorateItem)
+  };
+};
+
 const socket = io('http://localhost:3000');
 
 export const useWhatsAppAutomation = () => {
@@ -32,38 +115,19 @@ export const useWhatsAppAutomation = () => {
   const [templateLoading, setTemplateLoading] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateError, setTemplateError] = useState('');
-  
+  const [previewEdits, setPreviewEdits] = useState({});
+  const [pendingSendQueue, setPendingSendQueue] = useState([]);
   const [queues, setQueues] = useState({ sendingQueue: [], manualReviewQueue: [] });
   const [qrCode, setQrCode] = useState('');
   const [authStatus, setAuthStatus] = useState('none');
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [logs, setLogs] = useState([]);
+  const hasStartedSendingRef = useRef(false);
 
-  useEffect(() => {
-    socket.on('qr', (url) => setQrCode(url));
-    socket.on('ready', (isReady) => {
-      if (isReady) setAuthStatus('ready');
-    });
-    socket.on('log', (newLogs) => setLogs(newLogs));
-    socket.on('progress', (prog) => setProgress(prog));
-    socket.on('completed', (updatedReviewQueue) => {
-      setQueues(prev => ({ ...prev, manualReviewQueue: updatedReviewQueue }));
-      setAuthStatus('ready');
-    });
-
-    return () => {
-      socket.off('qr'); 
-      socket.off('ready'); 
-      socket.off('log'); 
-      socket.off('progress'); 
-      socket.off('completed');
-    };
-  }, []);
-
-  const loadTemplate = async () => {
+  const loadTemplate = useCallback(async (mode = campaignMode) => {
     setTemplateLoading(true);
     setTemplateError('');
-    const isLastVisitCampaign = campaignMode === 'last-visit';
+    const isLastVisitCampaign = mode === 'last-visit';
     const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
 
     try {
@@ -77,11 +141,96 @@ export const useWhatsAppAutomation = () => {
     } finally {
       setTemplateLoading(false);
     }
+  }, [campaignMode]);
+
+  const queuesWithPreview = useMemo(
+    () => applyPreviewState(queues, templateContent, previewEdits),
+    [queues, previewEdits, templateContent]
+  );
+
+  const updatePreviewName = (previewKey, nextName) => {
+    const normalizedName = normalizeText(nextName);
+
+    setPreviewEdits((current) => {
+      const existing = current[previewKey] || {};
+      const nextOverride = { ...existing };
+
+      if (normalizedName) {
+        nextOverride.name = normalizedName;
+      } else {
+        delete nextOverride.name;
+      }
+
+      if (!nextOverride.name && !nextOverride.excluded) {
+        const { [previewKey]: _removedOverride, ...rest } = current;
+        return rest;
+      }
+
+      return {
+        ...current,
+        [previewKey]: nextOverride
+      };
+    });
   };
+
+  const togglePreviewExclusion = (previewKey) => {
+    setPreviewEdits((current) => {
+      const existing = current[previewKey] || {};
+      const nextOverride = {
+        ...existing,
+        excluded: !existing.excluded
+      };
+
+      if (!nextOverride.name && !nextOverride.excluded) {
+        const { [previewKey]: _removedOverride, ...rest } = current;
+        return rest;
+      }
+
+      return {
+        ...current,
+        [previewKey]: nextOverride
+      };
+    });
+  };
+
+  const startSendingQueue = async (queueToSend) => {
+    hasStartedSendingRef.current = true;
+    await axios.post('http://localhost:3000/api/start-sending', { queue: queueToSend });
+  };
+
+  useEffect(() => {
+    socket.on('qr', (url) => setQrCode(url));
+    socket.on('ready', (isReady) => {
+      if (isReady) setAuthStatus('ready');
+    });
+    socket.on('log', (newLogs) => setLogs(newLogs));
+    socket.on('progress', (prog) => setProgress(prog));
+    socket.on('completed', (updatedReviewQueue) => {
+      setQueues((prev) => ({
+        ...prev,
+        manualReviewQueue: updatedReviewQueue
+      }));
+      setPendingSendQueue([]);
+      hasStartedSendingRef.current = false;
+      setAuthStatus('ready');
+    });
+
+    return () => {
+      socket.off('qr'); 
+      socket.off('ready'); 
+      socket.off('log'); 
+      socket.off('progress'); 
+      socket.off('completed');
+    };
+  }, []);
+
+  useEffect(() => {
+    loadTemplate(campaignMode);
+  }, [campaignMode, loadTemplate]);
 
   const openTemplateEditor = async () => {
     setShowTemplateEditorModal(true);
-    await loadTemplate();
+    await loadTemplate(campaignMode);
   };
 
   const closeTemplateEditor = () => {
@@ -145,7 +294,13 @@ export const useWhatsAppAutomation = () => {
     }
   };
 
-  const templatePreviewData = queues.sendingQueue[0] || queues.manualReviewQueue[0] || DEFAULT_PREVIEW_DATA;
+  const templatePreviewData = queuesWithPreview.sendingQueue.find((item) => !item.isExcluded)
+    || queuesWithPreview.manualReviewQueue.find((item) => !item.isExcluded)
+    || DEFAULT_PREVIEW_DATA;
+
+  const activeSendQueue = queuesWithPreview.sendingQueue
+    .filter((item) => !item.isExcluded)
+    .map(stripPreviewMetadata);
 
   const handleFileUpload = async (reprocessFile = null) => {
     const fileToUpload = reprocessFile || apptsFile;
@@ -217,26 +372,40 @@ export const useWhatsAppAutomation = () => {
   };
 
   const handleStartSending = async () => {
+    if (activeSendQueue.length === 0) {
+      return alert('Please keep at least one recipient in the send list.');
+    }
+
+    setPendingSendQueue(activeSendQueue);
+    hasStartedSendingRef.current = false;
     setStep(3);
     try {
       const statusRes = await axios.get('http://localhost:3000/api/whatsapp-status');
       if (statusRes.data.status !== 'ready') {
         await axios.post('http://localhost:3000/api/init-whatsapp');
       } else {
-        await axios.post('http://localhost:3000/api/start-sending');
+        await startSendingQueue(activeSendQueue);
       }
     } catch (err) {
+      hasStartedSendingRef.current = false;
       alert("Failed to start: " + (err.response?.data?.error || err.message));
     }
   };
 
   useEffect(() => {
-    if (step === 3 && authStatus === 'ready') {
-      axios.post('http://localhost:3000/api/start-sending').catch(err => {
+    if (step === 3 && authStatus === 'ready' && pendingSendQueue.length > 0 && !hasStartedSendingRef.current) {
+      startSendingQueue(pendingSendQueue).catch(err => {
+        hasStartedSendingRef.current = false;
         console.error("Auto-start failed:", err);
       });
     }
-  }, [authStatus, step]);
+  }, [authStatus, pendingSendQueue, step]);
+
+  useEffect(() => {
+    if (queues.sendingQueue.length === 0 && queues.manualReviewQueue.length === 0) {
+      return;
+    }
+  }, [queues.sendingQueue.length, queues.manualReviewQueue.length]);
 
   return {
     step, setStep,
@@ -255,11 +424,17 @@ export const useWhatsAppAutomation = () => {
     closeTemplateEditor,
     saveTemplate,
     resetTemplate,
-    queues, qrCode, authStatus, progress, logs,
+    queues: queuesWithPreview,
+    qrCode,
+    authStatus,
+    progress,
+    logs,
     handleFileUpload,
     handleClientFileUpload,
     handleClearClients,
     handleStartSending,
-    handleResolveIssues
+    handleResolveIssues,
+    updatePreviewName,
+    togglePreviewExclusion
   };
 };
