@@ -5,6 +5,7 @@ import ClientUploadModal from './components/ClientUploadModal';
 import ResolveIssuesModal from './components/ResolveIssuesModal';
 import PreviewSection from './components/PreviewSection';
 import AuthProgressSection from './components/AuthProgressSection';
+import PostSendResultsSection from './components/PostSendResultsSection';
 import TemplateEditorModal from './components/TemplateEditorModal';
 import './index.css';
 
@@ -27,13 +28,16 @@ function App() {
     saveTemplate,
     resetTemplate,
     queues, qrCode, authStatus, progress, logs,
+    sendResults, sendSummary, sendStatus,
     updatePreviewName,
     togglePreviewExclusion,
     handleFileUpload,
     handleClientFileUpload,
     handleClearClients,
     handleStartSending,
-    handleResolveIssues
+    handleResolveIssues,
+    handleRetryFailed,
+    setStep
   } = useWhatsAppAutomation();
 
   return (
@@ -103,12 +107,22 @@ function App() {
         />
       )}
 
-      {step === 3 && (
+      {step === 3 && sendStatus !== 'completed' && (
         <AuthProgressSection 
           authStatus={authStatus}
           qrCode={qrCode}
           progress={progress}
           logs={logs}
+        />
+      )}
+
+      {step === 3 && sendStatus === 'completed' && (
+        <PostSendResultsSection
+          results={sendResults}
+          summary={sendSummary}
+          progress={progress}
+          onRetryFailed={handleRetryFailed}
+          onResetView={() => setStep(2)}
         />
       )}
     </div>

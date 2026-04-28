@@ -78,6 +78,18 @@ const stripPreviewMetadata = (item) => {
   return payload;
 };
 
+const stripSendResultMetadata = (item) => {
+  const {
+    status,
+    error,
+    timestamp,
+    messageId,
+    ...payload
+  } = item;
+
+  return stripPreviewMetadata(payload);
+};
+
 const applyPreviewState = (queues, templateContent, previewEdits) => {
   const decorateItem = (item, index) => {
     const previewKey = item.previewKey || createPreviewKey(item, index);
@@ -122,6 +134,9 @@ export const useWhatsAppAutomation = () => {
   const [authStatus, setAuthStatus] = useState('none');
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [logs, setLogs] = useState([]);
+  const [sendResults, setSendResults] = useState([]);
+  const [sendSummary, setSendSummary] = useState({ total: 0, sent: 0, failed: 0 });
+  const [sendStatus, setSendStatus] = useState('idle');
   const hasStartedSendingRef = useRef(false);
 
   const loadTemplate = useCallback(async (mode = campaignMode) => {
@@ -195,7 +210,38 @@ export const useWhatsAppAutomation = () => {
 
   const startSendingQueue = async (queueToSend) => {
     hasStartedSendingRef.current = true;
+    setSendStatus('sending');
+    setSendResults([]);
+    setSendSummary({ total: queueToSend.length, sent: 0, failed: 0 });
+    setProgress({ current: 0, total: queueToSend.length });
     await axios.post('http://localhost:3000/api/start-sending', { queue: queueToSend });
+  };
+
+  const handleRetryFailed = async () => {
+    const failedQueue = sendResults
+      .filter((item) => item.status === 'failed')
+      .map(stripSendResultMetadata);
+
+    if (failedQueue.length === 0) {
+      return alert('There are no failed messages to retry.');
+    }
+
+    setPendingSendQueue(failedQueue);
+    hasStartedSendingRef.current = false;
+    setStep(3);
+
+    try {
+      const statusRes = await axios.get('http://localhost:3000/api/whatsapp-status');
+      if (statusRes.data.status !== 'ready') {
+        await axios.post('http://localhost:3000/api/init-whatsapp');
+      } else {
+        await startSendingQueue(failedQueue);
+      }
+    } catch (err) {
+      hasStartedSendingRef.current = false;
+      setSendStatus('completed');
+      alert('Failed to retry failed messages: ' + (err.response?.data?.error || err.message));
+    }
   };
 
   useEffect(() => {
@@ -205,11 +251,30 @@ export const useWhatsAppAutomation = () => {
     });
     socket.on('log', (newLogs) => setLogs(newLogs));
     socket.on('progress', (prog) => setProgress(prog));
-    socket.on('completed', (updatedReviewQueue) => {
+    socket.on('recipient-status', (recipientResult) => {
+      setSendResults((current) => {
+        const nextResults = current.filter((item) => !(item.phone === recipientResult.phone && item.timestamp === recipientResult.timestamp));
+        nextResults.push(recipientResult);
+        return nextResults;
+      });
+      setSendSummary((current) => ({
+        total: Math.max(current.total, progress.total),
+        sent: recipientResult.status === 'sent' ? current.sent + 1 : current.sent,
+        failed: recipientResult.status === 'failed' ? current.failed + 1 : current.failed
+      }));
+    });
+    socket.on('completed', (payload) => {
+      const completedPayload = Array.isArray(payload)
+        ? { manualReviewQueue: payload, results: [], summary: { total: payload.length, sent: 0, failed: payload.length } }
+        : (payload || {});
+
       setQueues((prev) => ({
         ...prev,
-        manualReviewQueue: updatedReviewQueue
+        manualReviewQueue: completedPayload.manualReviewQueue || []
       }));
+      setSendResults(Array.isArray(completedPayload.results) ? completedPayload.results : []);
+      setSendSummary(completedPayload.summary || { total: progress.total, sent: 0, failed: 0 });
+      setSendStatus('completed');
       setPendingSendQueue([]);
       hasStartedSendingRef.current = false;
       setAuthStatus('ready');
@@ -434,7 +499,11 @@ export const useWhatsAppAutomation = () => {
     handleClearClients,
     handleStartSending,
     handleResolveIssues,
+    handleRetryFailed,
     updatePreviewName,
-    togglePreviewExclusion
+    togglePreviewExclusion,
+    sendResults,
+    sendSummary,
+    sendStatus
   };
 };

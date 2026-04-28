@@ -23,6 +23,9 @@ function createSendingRoutes({ state, io, addLog, resetLogs, buildMessageForItem
         }
 
         state.isSending = true;
+        state.manualReviewQueue = [];
+        state.sendResults = [];
+        state.sendSummary = { total: state.sendingQueue.length, sent: 0, failed: 0 };
         resetLogs();
         addLog('Starting execution flow...');
 
