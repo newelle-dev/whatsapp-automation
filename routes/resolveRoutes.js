@@ -10,20 +10,26 @@ function createResolveRoutes({ state, addLog, buildMessageForItem, formatPhone, 
                 return res.status(400).json({ error: 'Invalid data format. Expected array of resolved clients.' });
             }
 
-            const resolvedMap = new Map();
-            resolved.forEach(({ name, phone }) => {
-                if (!name || !phone) return;
+            const resolvedByIndex = new Map();
+            resolved.forEach(({ queueIndex, phone }) => {
+                if (!Number.isInteger(queueIndex) || queueIndex < 0 || !phone) return;
                 const formatted = formatPhone(phone);
-                if (formatted) resolvedMap.set(name, formatted);
+                if (formatted) {
+                    resolvedByIndex.set(queueIndex, formatted);
+                }
             });
 
             const stillUnresolved = [];
-            for (const item of state.manualReviewQueue) {
-                const phone = resolvedMap.get(item.name);
+            const resolvedClientPairs = [];
+            for (let index = 0; index < state.manualReviewQueue.length; index += 1) {
+                const item = state.manualReviewQueue[index];
+                const phone = resolvedByIndex.get(index);
+
                 if (phone) {
                     item.phone = phone;
                     item.message = buildMessageForItem(item);
                     state.sendingQueue.push(item);
+                    resolvedClientPairs.push({ name: item.name, phone });
                 } else {
                     stillUnresolved.push(item);
                 }
@@ -31,7 +37,7 @@ function createResolveRoutes({ state, addLog, buildMessageForItem, formatPhone, 
             state.manualReviewQueue = stillUnresolved;
 
             const existingClients = await readClientData();
-            for (const [name, phone] of resolvedMap.entries()) {
+            for (const { name, phone } of resolvedClientPairs) {
                 const existing = existingClients.find((c) => c.name === name);
                 if (existing) {
                     if (!existing.phones.includes(phone)) {
@@ -46,7 +52,7 @@ function createResolveRoutes({ state, addLog, buildMessageForItem, formatPhone, 
             }
             await writeClientData(existingClients);
 
-            addLog(`Resolved ${resolvedMap.size} clients. Sending queue: ${state.sendingQueue.length}, remaining issues: ${state.manualReviewQueue.length}`);
+            addLog(`Resolved ${resolvedClientPairs.length} clients. Sending queue: ${state.sendingQueue.length}, remaining issues: ${state.manualReviewQueue.length}`);
             res.json({ sendingQueue: state.sendingQueue, manualReviewQueue: state.manualReviewQueue });
         } catch (err) {
             console.error('Error resolving issues:', err);

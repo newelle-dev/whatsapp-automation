@@ -1,5 +1,6 @@
 const state = {
     whatsappClient: null,
+    whatsappInitPromise: null,
     clientMap: new Map(),
     sendingQueue: [],
     manualReviewQueue: [],

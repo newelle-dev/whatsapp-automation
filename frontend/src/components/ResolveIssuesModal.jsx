@@ -4,15 +4,23 @@ import { AlertCircle } from 'lucide-react';
 export default function ResolveIssuesModal({ issues, onSubmit, onCancel }) {
   const [phoneInputs, setPhoneInputs] = useState({});
 
-  const handlePhoneChange = (name, value) => {
-    setPhoneInputs(prev => ({ ...prev, [name]: value }));
+  const handlePhoneChange = (queueIndex, value) => {
+    setPhoneInputs(prev => ({ ...prev, [queueIndex]: value }));
   };
 
   const handleSubmit = () => {
     // Collect all inputs that have a value
     const resolved = Object.entries(phoneInputs)
-      .filter(([name, phone]) => phone.trim() !== '')
-      .map(([name, phone]) => ({ name, phone }));
+      .filter(([, phone]) => phone.trim() !== '')
+      .map(([queueIndex, phone]) => {
+        const issue = issues[Number(queueIndex)] || {};
+
+        return {
+          queueIndex: Number(queueIndex),
+          name: issue.name || '',
+          phone
+        };
+      });
     
     // Proceed even if some inputs are left blank
     onSubmit(resolved);
@@ -40,8 +48,8 @@ export default function ResolveIssuesModal({ issues, onSubmit, onCancel }) {
                <input 
                  type="text" 
                  placeholder="Enter correct phone number (e.g. 0123456789)"
-                 value={phoneInputs[issue.name] || ''}
-                 onChange={(e) => handlePhoneChange(issue.name, e.target.value)}
+                 value={phoneInputs[idx] || ''}
+                 onChange={(e) => handlePhoneChange(idx, e.target.value)}
                  className="form-control"
                  style={{ marginTop: '0.5rem', width: '100%' }}
                />

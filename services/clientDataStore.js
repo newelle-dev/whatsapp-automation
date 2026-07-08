@@ -23,6 +23,7 @@ const writeClientData = async (clients) => {
         await fs.promises.writeFile(CLIENTS_FILE, JSON.stringify(clients, null, 2), 'utf8');
     } catch (error) {
         console.error('Error writing client data:', error);
+        throw new Error('Failed to persist client data.');
     }
 };
 

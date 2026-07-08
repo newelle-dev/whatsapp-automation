@@ -68,10 +68,10 @@ const renderPreviewMessage = (item, template) => {
 
 const stripPreviewMetadata = (item) => {
   const {
-    previewKey,
-    originalDisplayName,
-    originalName,
-    isExcluded,
+    previewKey: _previewKey,
+    originalDisplayName: _originalDisplayName,
+    originalName: _originalName,
+    isExcluded: _isExcluded,
     ...payload
   } = item;
 
@@ -80,10 +80,10 @@ const stripPreviewMetadata = (item) => {
 
 const stripSendResultMetadata = (item) => {
   const {
-    status,
-    error,
-    timestamp,
-    messageId,
+    status: _status,
+    error: _error,
+    timestamp: _timestamp,
+    messageId: _messageId,
     ...payload
   } = item;
 
@@ -245,25 +245,26 @@ export const useWhatsAppAutomation = () => {
   };
 
   useEffect(() => {
-    socket.on('qr', (url) => setQrCode(url));
-    socket.on('ready', (isReady) => {
-      if (isReady) setAuthStatus('ready');
-    });
-    socket.on('log', (newLogs) => setLogs(newLogs));
-    socket.on('progress', (prog) => setProgress(prog));
-    socket.on('recipient-status', (recipientResult) => {
+    const handleQr = (url) => setQrCode(url);
+    const handleReady = (isReady) => {
+      setAuthStatus(isReady ? 'ready' : 'none');
+    };
+    const handleLog = (newLogs) => setLogs(newLogs);
+    const handleProgress = (prog) => setProgress(prog);
+    const handleRecipientStatus = (recipientResult) => {
       setSendResults((current) => {
         const nextResults = current.filter((item) => !(item.phone === recipientResult.phone && item.timestamp === recipientResult.timestamp));
         nextResults.push(recipientResult);
         return nextResults;
       });
       setSendSummary((current) => ({
-        total: Math.max(current.total, progress.total),
+        total: current.total,
         sent: recipientResult.status === 'sent' ? current.sent + 1 : current.sent,
         failed: recipientResult.status === 'failed' ? current.failed + 1 : current.failed
       }));
-    });
-    socket.on('completed', (payload) => {
+    };
+
+    const handleCompleted = (payload) => {
       const completedPayload = Array.isArray(payload)
         ? { manualReviewQueue: payload, results: [], summary: { total: payload.length, sent: 0, failed: payload.length } }
         : (payload || {});
@@ -273,19 +274,27 @@ export const useWhatsAppAutomation = () => {
         manualReviewQueue: completedPayload.manualReviewQueue || []
       }));
       setSendResults(Array.isArray(completedPayload.results) ? completedPayload.results : []);
-      setSendSummary(completedPayload.summary || { total: progress.total, sent: 0, failed: 0 });
+      setSendSummary(completedPayload.summary || { total: 0, sent: 0, failed: 0 });
       setSendStatus('completed');
       setPendingSendQueue([]);
       hasStartedSendingRef.current = false;
       setAuthStatus('ready');
-    });
+    };
+
+    socket.on('qr', handleQr);
+    socket.on('ready', handleReady);
+    socket.on('log', handleLog);
+    socket.on('progress', handleProgress);
+    socket.on('recipient-status', handleRecipientStatus);
+    socket.on('completed', handleCompleted);
 
     return () => {
-      socket.off('qr'); 
-      socket.off('ready'); 
-      socket.off('log'); 
-      socket.off('progress'); 
-      socket.off('completed');
+      socket.off('qr', handleQr);
+      socket.off('ready', handleReady);
+      socket.off('log', handleLog);
+      socket.off('progress', handleProgress);
+      socket.off('recipient-status', handleRecipientStatus);
+      socket.off('completed', handleCompleted);
     };
   }, []);
 

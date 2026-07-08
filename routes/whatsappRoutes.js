@@ -5,7 +5,7 @@ function createWhatsAppRoutes({ state, io }) {
     const router = express.Router();
 
     router.post('/api/init-whatsapp', (req, res) => {
-        if (state.whatsappClient) {
+        if (state.whatsappClient || state.whatsappInitPromise) {
             if (state.isAuthReady) {
                 return res.json({ status: 'ready' });
             }
