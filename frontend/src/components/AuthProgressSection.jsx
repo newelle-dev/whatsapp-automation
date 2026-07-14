@@ -1,39 +1,44 @@
-import { CheckCircle, Smartphone } from 'lucide-react';
+import { CheckCircle, Smartphone, Loader2 } from 'lucide-react';
 
 const AuthProgressSection = ({ authStatus, qrCode, progress, logs }) => {
   return (
     <div className="fade-in">
       {authStatus === 'ready' ? (
         <div className="qr-container" style={{ textAlign: 'center' }}>
-          <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '2rem', borderRadius: '50%', marginBottom: '1rem', display: 'inline-flex' }}>
+          <div style={{ background: 'rgba(16, 185, 129, 0.12)', padding: '2rem', borderRadius: '50%', marginBottom: '1.25rem', display: 'inline-flex', boxShadow: '0 0 30px rgba(16, 185, 129, 0.2)' }}>
             <CheckCircle size={64} color="var(--success)" />
           </div>
-          <h3>WhatsApp Connected Successfully!</h3>
-          <p className="subtitle">Your session is active and messages are being sent.</p>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: 700 }}>WhatsApp Connected Successfully!</h3>
+          <p className="subtitle" style={{ marginBottom: 0, marginTop: '0.25rem' }}>Your active session is running and messages are ready to dispatch.</p>
         </div>
       ) : qrCode ? (
         <div className="qr-container">
-          <div className="qr-code">
-            <img src={qrCode} alt="WhatsApp QR Code" width="256" height="256" />
+          <div className="qr-code-wrapper">
+            <div className="qr-code-scanner-line"></div>
+            <img src={qrCode} alt="WhatsApp QR Code" width="256" height="256" style={{ filter: 'contrast(1.1)' }} />
           </div>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Smartphone /> Scan with WhatsApp
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+            <Smartphone style={{ color: 'var(--accent-color)' }} /> Link WhatsApp Client
           </h3>
-          <p className="subtitle" style={{ textAlign: 'center', maxWidth: '400px', marginTop: '0.5rem' }}>
-            Open WhatsApp on your phone - Settings - Linked Devices - Link a Device, and point your camera at this QR code.
+          <p className="subtitle" style={{ textAlign: 'center', maxWidth: '440px', marginTop: '0.5rem', marginBottom: 0 }}>
+            Open WhatsApp on your phone → Settings / Menu → Linked Devices → Link a Device, then focus your phone camera on this QR code.
           </p>
         </div>
       ) : (
-        <div className="qr-container">
-          <p>Initializing WhatsApp Client...</p>
+        <div className="qr-container" style={{ padding: '4rem 2rem' }}>
+          <Loader2 size={42} className="animate-spin" style={{ color: 'var(--accent-color)', marginBottom: '1rem', animation: 'spin 1.5s linear infinite' }} />
+          <h3 style={{ fontWeight: 600 }}>Initializing WhatsApp Client...</h3>
+          <p className="subtitle" style={{ marginBottom: 0, marginTop: '0.25rem' }}>Preparing local Chromium headless process. This may take up to 20 seconds.</p>
         </div>
       )}
 
       {authStatus === 'ready' && progress.total > 0 && (
-        <div style={{ marginTop: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <span>Sending Progress</span>
-            <span>{progress.current} / {progress.total}</span>
+        <div className="progress-section-container">
+          <div className="progress-header">
+            <span>Sending Dispatch Progress</span>
+            <span style={{ color: 'var(--accent-color)' }}>
+              {progress.current} / {progress.total} ({Math.round((progress.current / progress.total) * 100)}%)
+            </span>
           </div>
           <div className="progress-container">
             <div 
@@ -41,22 +46,49 @@ const AuthProgressSection = ({ authStatus, qrCode, progress, logs }) => {
               style={{ width: `${(progress.current / progress.total) * 100}%` }}
             ></div>
           </div>
-          <p className="subtitle" style={{ textAlign: 'center', fontSize: '0.875rem' }}>
-            Please keep this window open until all messages are sent.
+          <p className="subtitle" style={{ textAlign: 'center', fontSize: '0.85rem', marginBottom: 0, marginTop: '0.5rem' }}>
+            Please keep this tab and backend terminal running until the execution reaches completion.
           </p>
         </div>
       )}
 
-      <h3 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Live Logs</h3>
-      <div className="logs-container">
-        {logs.map((log, i) => (
-          <div key={i} className="log-entry">
-            <span className="log-time">[{log.time}]</span>
-            <span className="log-msg">{log.msg}</span>
+      {/* MacOS terminal styled logs */}
+      <div className="terminal-window">
+        <div className="terminal-header">
+          <div className="terminal-dots">
+            <span className="terminal-dot close"></span>
+            <span className="terminal-dot minimize"></span>
+            <span className="terminal-dot zoom"></span>
           </div>
-        ))}
-        {logs.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Waiting for execution to start...</p>}
+          <div className="terminal-title">whatsapp-client-logs.sh</div>
+          <div style={{ width: '40px' }}></div> {/* spacer */}
+        </div>
+        <div className="logs-container">
+          {logs.map((log, i) => (
+            <div key={i} className="log-entry">
+              <span className="log-time">[{log.time}]</span>
+              <span className="log-msg" style={{
+                color: log.msg.toLowerCase().includes('failed') || log.msg.toLowerCase().includes('error') ? 'var(--error)' :
+                       log.msg.toLowerCase().includes('sent') || log.msg.toLowerCase().includes('success') ? 'var(--success)' : 'inherit'
+              }}>
+                {log.msg}
+              </span>
+            </div>
+          ))}
+          {logs.length === 0 && (
+            <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontFamily: 'monospace' }}>
+              Waiting for client execution logs to stream...
+            </p>
+          )}
+        </div>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

@@ -7,6 +7,7 @@ import PreviewSection from './components/PreviewSection';
 import AuthProgressSection from './components/AuthProgressSection';
 import PostSendResultsSection from './components/PostSendResultsSection';
 import TemplateEditorModal from './components/TemplateEditorModal';
+import { MessageSquare, Settings } from 'lucide-react';
 import './index.css';
 
 function App() {
@@ -44,16 +45,38 @@ function App() {
     setStep
   } = useWhatsAppAutomation();
 
+  const getStatusLabelAndClass = () => {
+    if (authStatus === 'ready') {
+      return { label: 'WhatsApp Live', dotClass: 'active' };
+    }
+    if (step === 3 && authStatus !== 'ready') {
+      return { label: 'Client Connecting', dotClass: 'pending' };
+    }
+    return { label: 'Client Offline', dotClass: 'inactive' };
+  };
+
+  const status = getStatusLabelAndClass();
+
   return (
     <div className="app-container">
       <div className="app-header">
-        <div>
-          <h1>WhatsApp Automation</h1>
-          <p className="subtitle">Send personalized appointment reminders automatically.</p>
+        <div className="header-title-area">
+          <div className="app-logo-row">
+            <div className="logo-badge">
+              <MessageSquare size={22} color="white" />
+            </div>
+            <h1>176 Avenue WhatsApp</h1>
+          </div>
+          <p className="subtitle" style={{ margin: 0, marginTop: '0.25rem' }}>Personalized appointment reminders automation hub.</p>
         </div>
+        
         <div className="app-actions">
-          <button className="btn btn-ghost" onClick={openTemplateEditor}>
-            Edit Template
+          <div className="status-indicator">
+            <span className={`status-dot ${status.dotClass}`}></span>
+            <span>{status.label}</span>
+          </div>
+          <button className="btn btn-ghost" onClick={openTemplateEditor} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Settings size={16} /> Edit Template
           </button>
         </div>
       </div>
@@ -112,6 +135,7 @@ function App() {
           selectedOutlet={selectedOutlet}
           canStartSending={sendReadiness.canStartSending}
           sendDisabledReason={sendReadiness.reason}
+          templateWarnings={templateWarnings}
           onStartSending={handleStartSending}
           onEditRecipientName={updatePreviewName}
           onToggleRecipientExclusion={togglePreviewExclusion}

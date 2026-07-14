@@ -67,11 +67,11 @@ This plan focuses on preventing message mistakes where place/map link is not upd
 
 #### Phase 4: Optional Nice-to-Haves
 
-- [ ] Add template lint warnings on save (warn if hardcoded outlet names detected).
+- [x] Add template lint warnings on save (warn if hardcoded outlet names detected).
     - File: `routes/templateRoutes.js`
     - Estimate: 1h
     - Dependency: Phase 2 validator patterns
-- [ ] Add a "Selected outlet" summary card above preview list.
+- [x] Add a "Selected outlet" summary card above preview list.
     - File: `frontend/src/components/PreviewSection.jsx`
     - Estimate: 0.5h
     - Dependency: outlet selector
@@ -88,11 +88,11 @@ This plan focuses on preventing message mistakes where place/map link is not upd
 ### Testing Checklist
 
 - [x] Unit: rendering replaces `{{outletName}}` and `{{outletMapLink}}` correctly.
-- [ ] Unit: validator rejects unknown outlet and unresolved placeholders.
-- [ ] Integration: send starts successfully with valid outlet and template.
-- [ ] Integration: send blocked when outlet missing.
-- [ ] Integration: send blocked when template contains unresolved placeholders.
-- [ ] Manual QA: switch between Bangsar/KLGCC/SS2 and verify preview links change.
+- [x] Unit: validator rejects unknown outlet and unresolved placeholders.
+- [x] Integration: send starts successfully with valid outlet and template.
+- [x] Integration: send blocked when outlet missing.
+- [x] Integration: send blocked when template contains unresolved placeholders.
+- [x] Manual QA: switch between Bangsar/KLGCC/SS2 and verify preview links change.
 
 ### Rollout and Risk Control
 

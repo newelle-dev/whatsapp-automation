@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -262,7 +263,7 @@ export const useWhatsAppAutomation = () => {
     });
   };
 
-  const startSendingQueue = async (queueToSend) => {
+  const startSendingQueue = useCallback(async (queueToSend) => {
     hasStartedSendingRef.current = true;
     setSendStatus('sending');
     setSendResults([]);
@@ -272,7 +273,7 @@ export const useWhatsAppAutomation = () => {
       queue: queueToSend,
       selectedOutletKey
     });
-  };
+  }, [selectedOutletKey]);
 
   const handleRetryFailed = async () => {
     const failedQueue = sendResults
@@ -562,7 +563,7 @@ export const useWhatsAppAutomation = () => {
         console.error("Auto-start failed:", err);
       });
     }
-  }, [authStatus, pendingSendQueue, step]);
+  }, [authStatus, pendingSendQueue, step, startSendingQueue]);
 
   useEffect(() => {
     if (queues.sendingQueue.length === 0 && queues.manualReviewQueue.length === 0) {

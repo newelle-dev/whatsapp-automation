@@ -7,12 +7,12 @@ export const OUTLETS = Object.freeze({
   klgcc: Object.freeze({
     key: 'klgcc',
     name: '176 Avenue @ KLGCC',
-    mapLink: ''
+    mapLink: 'https://maps.app.goo.gl/6kvicGb14wAEXWMa9'
   }),
   ss2: Object.freeze({
     key: 'ss2',
     name: '176 Avenue @ SS2',
-    mapLink: ''
+    mapLink: 'https://maps.app.goo.gl/o6HbVGRWYXVaLXny9'
   })
 });
 
@@ -39,7 +39,7 @@ export function isValidHttpUrl(value) {
   try {
     const parsedUrl = new URL(value.trim());
     return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
-  } catch (_error) {
+  } catch {
     return false;
   }
 }

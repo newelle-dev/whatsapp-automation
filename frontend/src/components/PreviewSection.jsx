@@ -1,4 +1,4 @@
-import { Play, Copy, Trash2, Edit3 } from 'lucide-react';
+import { Play, Copy, Trash2, Edit3, MapPin, ExternalLink, AlertTriangle, AlertCircle, CheckCircle2, UserCheck, UserMinus } from 'lucide-react';
 import { isValidHttpUrl } from '../config/outlets';
 
 const PreviewSection = ({
@@ -6,6 +6,7 @@ const PreviewSection = ({
   selectedOutlet,
   sendDisabledReason,
   canStartSending,
+  templateWarnings,
   onStartSending,
   onEditRecipientName,
   onToggleRecipientExclusion
@@ -21,147 +22,201 @@ const PreviewSection = ({
     const btn = document.getElementById(`btn-copy-${index}`);
     if (btn) {
       const originalText = btn.innerHTML;
-      btn.innerText = 'Copied!';
+      btn.innerHTML = 'Copied!';
       setTimeout(() => {
         btn.innerHTML = originalText;
       }, 2000);
     }
   };
 
+  const getInitials = (name) => {
+    if (!name) return 'C';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h2>Preview Messages</h2>
-          <p className="subtitle">Generated messages ready for review. Edit a name, remove a recipient, and confirm the selected outlet before you start sending.</p>
+      <div className="app-header" style={{ borderBottom: 'none', marginBottom: '1rem', paddingBottom: 0 }}>
+        <div className="header-title-area">
+          <h2>Review Messages</h2>
+          <p className="subtitle">Preview rendered appointment reminders and personalize client details before sending.</p>
         </div>
         <button 
           className="btn" 
           onClick={onStartSending}
           disabled={!canStartSending}
           title={sendDisabledReason || ''}
+          style={{ background: 'var(--whatsapp-color)', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
         >
           Start Sending ({activeCount}) <Play size={18} />
         </button>
       </div>
 
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        gap: '1rem',
-        alignItems: 'flex-start',
-        marginTop: '1rem',
-        padding: '1rem',
-        borderRadius: '14px',
-        border: '1px solid var(--glass-border)',
-        background: 'rgba(0,0,0,0.16)'
-      }}>
-        <div style={{ flex: 1 }}>
-          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 600 }}>Selected outlet</p>
-          <h3 style={{ margin: '0.35rem 0 0.35rem' }}>{selectedOutletLabel}</h3>
-          <p style={{ margin: '0 0 0.75rem', color: outletHasValidMapLink ? 'var(--text-muted)' : '#fca5a5' }}>
-            {outletHasValidMapLink
-              ? <a href={selectedOutletMapLink} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Open map link</a>
-              : 'Map link missing for this outlet.'}
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <span style={{ padding: '0.35rem 0.65rem', borderRadius: '999px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: '0.85rem', border: '1px solid var(--glass-border)' }}>
-              Active recipients: {activeCount}
-            </span>
-            <span style={{ padding: '0.35rem 0.65rem', borderRadius: '999px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: '0.85rem', border: '1px solid var(--glass-border)' }}>
-              Removed from send: {excludedCount}
-            </span>
+      <div className="preview-layout">
+        {/* Sidebar Summary Card */}
+        <div className="sidebar-summary-card">
+          <div>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <MapPin size={16} /> Selected Outlet
+            </h3>
+            <h3 style={{ marginTop: '0.5rem', fontWeight: 700 }}>{selectedOutletLabel}</h3>
+            <p style={{ marginTop: '0.35rem', fontSize: '0.9rem' }}>
+              {outletHasValidMapLink ? (
+                <a 
+                  href={selectedOutletMapLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  style={{ color: '#818cf8', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 500 }}
+                >
+                  View on Google Maps <ExternalLink size={12} />
+                </a>
+              ) : (
+                <span style={{ color: 'var(--error)' }}>Map link missing for this outlet.</span>
+              )}
+            </p>
+          </div>
+
+          <div className="meta-stats-row">
+            <div className="meta-stat-item">
+              <span className="label">Active Queue</span>
+              <span className="value">{activeCount} clients</span>
+            </div>
+            <div className="meta-stat-item">
+              <span className="label">Removed</span>
+              <span className="value">{excludedCount} clients</span>
+            </div>
+            <div className="meta-stat-item">
+              <span className="label">Total Loaded</span>
+              <span className="value">{queues.sendingQueue.length} clients</span>
+            </div>
+          </div>
+
+          <div>
+            <div className={`summary-header-badge ${canStartSending ? 'ready' : 'blocked'}`}>
+              {canStartSending ? 'Ready to Dispatch' : 'Configuration Warning'}
+            </div>
+            <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+              {sendDisabledReason ? (
+                <span style={{ color: 'var(--error)' }}>{sendDisabledReason}</span>
+              ) : (
+                'All checks passed. Messages are formatted correctly and locations are verified.'
+              )}
+            </p>
           </div>
         </div>
-        <div style={{ textAlign: 'right', minWidth: '12rem' }}>
-          <p style={{ margin: 0, color: sendDisabledReason ? '#fca5a5' : 'var(--success)', fontSize: '0.875rem', fontWeight: 600 }}>
-            {sendDisabledReason ? 'Send blocked' : 'Ready to send'}
-          </p>
-          <p style={{ margin: '0.4rem 0 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            {sendDisabledReason || 'Selected outlet and rendered messages passed preflight.'}
-          </p>
-        </div>
-      </div>
-      
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '2rem' }}>
-        {queues.sendingQueue.map((q, i) => (
-          <div
-            key={q.previewKey || i}
-            style={{
-              background: 'var(--bg-secondary)',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              border: '1px solid var(--glass-border)',
-              opacity: q.isExcluded ? 0.6 : 1,
-              position: 'relative'
-            }}
-          >
-            {q.isExcluded && (
-              <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                <Trash2 size={14} /> Removed from send
+
+        {/* Messaging Preview Panel */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Warnings Banner */}
+          {templateWarnings && templateWarnings.length > 0 && (
+            <div className="alert-banner">
+              <div className="alert-banner-title">
+                <AlertTriangle size={18} /> Template Warnings Detected
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '1.25rem', lineHeight: '1.6', fontSize: '0.85rem' }}>
+                {templateWarnings.map((warning, idx) => (
+                  <li key={idx}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* List of bubbles */}
+          <div className="whatsapp-chat-container">
+            {queues.sendingQueue.map((q, i) => (
+              <div
+                key={q.previewKey || i}
+                className={`whatsapp-bubble-panel ${q.isExcluded ? 'excluded' : ''}`}
+              >
+                <div className="whatsapp-bubble-header">
+                  <div className="whatsapp-bubble-client-info" style={{ flex: 1 }}>
+                    <div className="whatsapp-client-avatar">
+                      {getInitials(q.displayName || q.name)}
+                    </div>
+                    <div className="whatsapp-client-details" style={{ flex: 1 }}>
+                      <h4>
+                        <a 
+                          href={`https://web.whatsapp.com/send/?phone=${q.phone.replace(/[^0-9]/g, '')}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          title="Open chat window in WhatsApp Web"
+                        >
+                          {q.displayName || q.name}
+                        </a>
+                      </h4>
+                      <div className="phone-sub">{q.phone}</div>
+
+                      {!q.isExcluded && (
+                        <label style={{ display: 'block', marginTop: '0.4rem' }}>
+                          <input
+                            type="text"
+                            value={q.displayName || ''}
+                            onChange={(event) => onEditRecipientName?.(q.previewKey, event.target.value)}
+                            className="whatsapp-edit-input"
+                            placeholder="Edit recipient name (overrides name)"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="result-row-actions">
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={() => handleCopy(q.message, i)}
+                      id={`btn-copy-${i}`}
+                      style={{ padding: '0.5rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      disabled={q.isExcluded}
+                    >
+                      <Copy size={14} /> Copy
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={() => onToggleRecipientExclusion?.(q.previewKey)}
+                      style={{ 
+                        padding: '0.5rem 0.85rem', 
+                        fontSize: '0.85rem', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '0.35rem',
+                        background: q.isExcluded ? 'var(--accent-color)' : 'rgba(244, 63, 94, 0.15)',
+                        color: q.isExcluded ? 'white' : '#fca5a5',
+                        border: q.isExcluded ? 'none' : '1px solid rgba(244, 63, 94, 0.25)',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      {q.isExcluded ? (
+                        <>
+                          <UserCheck size={14} /> Restore
+                        </>
+                      ) : (
+                        <>
+                          <UserMinus size={14} /> Remove
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`whatsapp-bubble-body ${q.isExcluded ? '' : 'sent-bubble'}`}>
+                  {q.message}
+                </div>
+              </div>
+            ))}
+
+            {queues.sendingQueue.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', border: '1px dashed var(--glass-border)', borderRadius: '12px' }}>
+                <AlertCircle size={36} style={{ marginBottom: '1rem', color: 'var(--accent-color)' }} />
+                <p>No valid recipients to preview. Try uploading a different appointments export file.</p>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div style={{ flex: 1, paddingRight: '1rem' }}>
-                <h3 style={{ margin: '0 0 0.75rem 0' }}>
-                  <a 
-                    href={`https://web.whatsapp.com/send/?phone=${q.phone.replace(/[^0-9]/g, '')}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    style={{ color: 'inherit', textDecoration: 'none' }}
-                    onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-                    onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
-                    title="Open in WhatsApp"
-                  >
-                    {q.displayName || q.name}
-                  </a>{' '}
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 'normal' }}>({q.phone})</span>
-                </h3>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', maxWidth: '28rem' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    <Edit3 size={14} /> Recipient name for this send
-                  </span>
-                  <input
-                    type="text"
-                    value={q.displayName || ''}
-                    onChange={(event) => onEditRecipientName?.(q.previewKey, event.target.value)}
-                    disabled={q.isExcluded}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem 0.9rem',
-                      borderRadius: '8px',
-                      border: '1px solid var(--glass-border)',
-                      background: 'rgba(0,0,0,0.15)',
-                      color: 'var(--text-primary)'
-                    }}
-                    placeholder="Edit recipient name"
-                  />
-                </label>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'flex-end' }}>
-                <button 
-                  className="btn" 
-                  onClick={() => handleCopy(q.message, i)}
-                  id={`btn-copy-${i}`}
-                  style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  <Copy size={14} /> Copy Message
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => onToggleRecipientExclusion?.(q.previewKey)}
-                  style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: q.isExcluded ? '#374151' : '#7c2d12' }}
-                >
-                  <Trash2 size={14} /> {q.isExcluded ? 'Undo Remove' : 'Remove from Send'}
-                </button>
-              </div>
-            </div>
-            <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', background: 'rgba(0,0,0,0.1)', padding: '1rem', borderRadius: '8px', margin: 0, border: '1px solid var(--glass-border)' }}>{q.message}</pre>
           </div>
-        ))}
-        {queues.sendingQueue.length === 0 && <p>No valid scripts to preview.</p>}
+        </div>
       </div>
-
     </div>
   );
 };

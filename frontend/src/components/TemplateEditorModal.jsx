@@ -1,5 +1,34 @@
-import { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useEffect, useState, useRef } from 'react';
 import { Edit3, Save, RotateCcw, X } from 'lucide-react';
+import { OUTLETS } from '../config/outlets';
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function lintTemplateForHardcodedOutlets(template) {
+  const templateText = String(template || '');
+  const warnings = [];
+
+  Object.values(OUTLETS).forEach((outlet) => {
+    if (outlet?.name) {
+      const outletNamePattern = new RegExp(escapeRegExp(outlet.name), 'i');
+      if (outletNamePattern.test(templateText)) {
+        warnings.push(`Template hardcodes outlet name "${outlet.name}". Use {{outletName}} instead.`);
+      }
+    }
+
+    if (outlet?.mapLink) {
+      const outletMapLinkPattern = new RegExp(escapeRegExp(outlet.mapLink), 'i');
+      if (outletMapLinkPattern.test(templateText)) {
+        warnings.push(`Template hardcodes a map link for "${outlet.name}". Use {{outletMapLink}} instead.`);
+      }
+    }
+  });
+
+  return warnings;
+}
 
 const PLACEHOLDERS = [
   { key: '{{name}}', label: 'Client name' },
@@ -58,12 +87,12 @@ export default function TemplateEditorModal({
   loading,
   saving,
   error,
-  warnings,
   onSave,
   onCancel,
   onReset
 }) {
   const [draft, setDraft] = useState(template || DEFAULT_TEMPLATE);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     setDraft(template || DEFAULT_TEMPLATE);
@@ -71,12 +100,12 @@ export default function TemplateEditorModal({
 
   const previewText = substituteTemplate(draft || DEFAULT_TEMPLATE, previewData || {});
   const hasChanges = draft !== (template || DEFAULT_TEMPLATE);
+  const liveWarnings = lintTemplateForHardcodedOutlets(draft);
 
   const handleCancel = () => {
     if (hasChanges && !window.confirm('Discard unsaved template changes?')) {
       return;
     }
-
     onCancel();
   };
 
@@ -85,8 +114,31 @@ export default function TemplateEditorModal({
   };
 
   const handleReset = () => {
-    setDraft(DEFAULT_TEMPLATE);
-    onReset(DEFAULT_TEMPLATE);
+    if (window.confirm('Reset template to default template?')) {
+      setDraft(DEFAULT_TEMPLATE);
+      onReset(DEFAULT_TEMPLATE);
+    }
+  };
+
+  const handleInsertPlaceholder = (placeholderKey) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const before = text.substring(0, start);
+    const after = text.substring(end, text.length);
+
+    const nextValue = before + placeholderKey + after;
+    setDraft(nextValue);
+
+    // Refocus the textarea and position cursor after the inserted placeholder
+    setTimeout(() => {
+      textarea.focus();
+      const nextCursorPos = start + placeholderKey.length;
+      textarea.setSelectionRange(nextCursorPos, nextCursorPos);
+    }, 0);
   };
 
   return (
@@ -95,10 +147,10 @@ export default function TemplateEditorModal({
         <div className="template-editor-header">
           <div>
             <h2 className="template-editor-title">
-              <Edit3 size={22} /> Edit Message Template
+              <Edit3 size={22} style={{ color: 'var(--accent-color)' }} /> Edit Message Template
             </h2>
             <p className="template-editor-subtitle">
-              Update the reusable reminder text that is sent for every appointment.
+              Modify the reusable reminder template used for campaign dispatches.
             </p>
           </div>
           <button className="btn-icon" onClick={handleCancel} aria-label="Close template editor">
@@ -107,56 +159,77 @@ export default function TemplateEditorModal({
         </div>
 
         <div className="template-editor-layout">
+          {/* Edit Panel */}
           <div className="template-editor-panel">
-            <label className="template-editor-label" htmlFor="message-template">Template</label>
+            <label className="template-editor-label" htmlFor="message-template">Template Text</label>
             <textarea
               id="message-template"
+              ref={textareaRef}
               className="template-editor-textarea"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="Write your message template here..."
-              rows={12}
               disabled={loading || saving}
             />
+            
+            <div style={{ marginTop: '1.25rem' }}>
+              <span className="template-editor-label" style={{ fontSize: '0.8rem' }}>Placeholders (Click to insert)</span>
+              <div className="template-placeholder-list">
+                {PLACEHOLDERS.map((placeholder) => (
+                  <button
+                    key={placeholder.key}
+                    type="button"
+                    className="template-placeholder-pill"
+                    onClick={() => handleInsertPlaceholder(placeholder.key)}
+                    title={placeholder.label}
+                  >
+                    {placeholder.key}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="template-editor-actions">
-              <button className="btn template-secondary-btn" onClick={handleReset} disabled={loading || saving}>
-                <RotateCcw size={16} /> Reset
+              <button className="btn btn-secondary" onClick={handleReset} disabled={loading || saving}>
+                <RotateCcw size={16} /> Reset Default
               </button>
               <button className="btn" onClick={handleSave} disabled={loading || saving || !hasChanges}>
                 <Save size={16} /> {saving ? 'Saving...' : 'Save Template'}
               </button>
             </div>
             {error && <p className="template-editor-error">{error}</p>}
-            {Array.isArray(warnings) && warnings.length > 0 && (
+          </div>
+
+          {/* Live Preview Panel */}
+          <div className="template-editor-panel template-preview-panel">
+            <div className="template-editor-label">Live Preview (Simulated Bubble)</div>
+            
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(0,0,0,0.1)', padding: '1rem', borderRadius: '10px', overflowY: 'auto' }}>
+              {loading ? (
+                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>Loading template...</div>
+              ) : (
+                <div className="whatsapp-bubble-panel" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+                  <div className="whatsapp-bubble-body sent-bubble" style={{ fontSize: '0.9rem' }}>
+                    {previewText}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {liveWarnings.length > 0 && (
               <div className="template-editor-warning-block">
-                <p className="template-help-title">Template warnings</p>
+                <p className="template-help-title">Template Safety Warnings</p>
                 <ul className="template-editor-warning-list">
-                  {warnings.map((warning) => (
+                  {liveWarnings.map((warning) => (
                     <li key={warning}>{warning}</li>
                   ))}
                 </ul>
               </div>
             )}
-          </div>
 
-          <div className="template-editor-panel template-preview-panel">
-            <div className="template-editor-label">Live Preview</div>
-            <div className="template-preview-card">
-              {loading ? 'Loading current template...' : previewText}
-            </div>
-            <div className="template-help-block">
-              <p className="template-help-title">Supported placeholders</p>
-              <div className="template-placeholder-list">
-                {PLACEHOLDERS.map((placeholder) => (
-                  <span className="template-placeholder-pill" key={placeholder.key} title={placeholder.label}>
-                    {placeholder.key}
-                  </span>
-                ))}
-              </div>
-              <p className="template-help-note">
-                Preview uses the first queued appointment when available, otherwise a sample reminder. Use the outlet placeholders to keep one template reusable across Bangsar, KLGCC, and SS2.
-              </p>
-            </div>
+            <p className="template-help-note">
+              The preview simulates the rendering output. Click the placeholder pills above to insert dynamic tokens. Use outlet tags to support automatic branch mapping.
+            </p>
           </div>
         </div>
       </div>

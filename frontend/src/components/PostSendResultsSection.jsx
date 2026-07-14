@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CheckCircle2, Clock3, Copy, Download, RefreshCcw, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, Copy, Download, RefreshCcw, XCircle, ChevronDown, MessageSquare } from 'lucide-react';
 
 const statusConfig = {
   sent: {
@@ -11,8 +11,8 @@ const statusConfig = {
   failed: {
     label: 'Failed',
     icon: XCircle,
-    color: '#f87171',
-    background: 'rgba(248, 113, 113, 0.12)'
+    color: 'var(--error)',
+    background: 'rgba(244, 63, 94, 0.12)'
   }
 };
 
@@ -53,18 +53,18 @@ const PostSendResultsSection = ({
   return (
     <div className="fade-in results-section">
       <div className="results-header">
-        <div>
-          <h2>Send Results</h2>
-          <p className="subtitle">A batch summary with per-recipient status and quick actions for follow-up.</p>
+        <div className="header-title-area">
+          <h2>Send Campaign Results</h2>
+          <p className="subtitle" style={{ marginBottom: 0 }}>Review final dispatch statuses, export execution logs, and run target retries.</p>
         </div>
         <div className="results-actions">
           <button className="btn btn-secondary" onClick={handleExport} disabled={sortedResults.length === 0}>
             Export CSV <Download size={16} />
           </button>
-          <button className="btn btn-secondary" onClick={onRetryFailed} disabled={summary.failed === 0}>
+          <button className="btn" onClick={onRetryFailed} disabled={summary.failed === 0} style={{ background: 'var(--accent-color)' }}>
             Retry Failed <RefreshCcw size={16} />
           </button>
-          <button className="btn btn-secondary" onClick={onResetView}>
+          <button className="btn btn-ghost" onClick={onResetView}>
             Review Queue <Clock3 size={16} />
           </button>
         </div>
@@ -72,14 +72,14 @@ const PostSendResultsSection = ({
 
       <div className="results-summary-grid">
         {[
-          { label: 'Total', value: summary.total },
-          { label: 'Sent', value: summary.sent, color: 'var(--success)' },
-          { label: 'Failed', value: summary.failed, color: '#f87171' },
-          { label: 'Progress', value: progress.total ? `${progress.current}/${progress.total}` : '0/0' }
+          { label: 'Total Recipients', value: summary.total, cssClass: 'card-total', color: 'var(--text-main)' },
+          { label: 'Successfully Sent', value: summary.sent, cssClass: 'card-sent', color: 'var(--success)' },
+          { label: 'Failed Deliveries', value: summary.failed, cssClass: 'card-failed', color: 'var(--error)' },
+          { label: 'Campaign Progress', value: progress.total ? `${progress.current}/${progress.total}` : '0/0', cssClass: 'card-progress', color: 'var(--warning)' }
         ].map((item) => (
-          <div key={item.label} className="result-card">
+          <div key={item.label} className={`result-card ${item.cssClass}`}>
             <div className="label">{item.label}</div>
-            <div className="value" style={{ color: item.color || 'var(--text-primary)' }}>{item.value}</div>
+            <div className="value" style={{ color: item.color }}>{item.value}</div>
           </div>
         ))}
       </div>
@@ -88,11 +88,11 @@ const PostSendResultsSection = ({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              <th>Recipient</th>
-              <th>Phone</th>
-              <th>Status</th>
-              <th>Time</th>
-              <th>Actions</th>
+              <th>Recipient Name</th>
+              <th>Phone Number</th>
+              <th>Dispatch Status</th>
+              <th>Timestamp</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -101,30 +101,42 @@ const PostSendResultsSection = ({
               const StatusIcon = config.icon;
 
               return (
-                <tr key={`${result.phone}-${result.timestamp}-${index}`} style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <td style={{ verticalAlign: 'top' }}>
-                    <div style={{ fontWeight: 600 }}>{result.name}</div>
+                <tr key={`${result.phone}-${result.timestamp}-${index}`}>
+                  <td style={{ verticalAlign: 'top', paddingRight: '1rem' }}>
+                    <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      {result.name}
+                    </div>
                     {result.message && (
                       <details style={{ marginTop: '0.5rem' }}>
-                        <summary style={{ cursor: 'pointer', color: 'var(--text-muted)' }}>Show message</summary>
-                        <pre className="message-pre">{result.message}</pre>
+                        <summary style={{ cursor: 'pointer', color: '#818cf8', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', userSelect: 'none' }}>
+                          <MessageSquare size={12} /> Show message draft <ChevronDown size={10} />
+                        </summary>
+                        <div className="whatsapp-bubble-panel" style={{ background: 'transparent', border: 'none', padding: '0.5rem 0 0 0', boxShadow: 'none' }}>
+                          <div className="whatsapp-bubble-body sent-bubble" style={{ fontSize: '0.85rem', padding: '0.75rem 1rem' }}>
+                            {result.message}
+                          </div>
+                        </div>
                       </details>
                     )}
-                    {result.error && <div style={{ marginTop: '0.5rem', color: '#fca5a5', fontSize: '0.9rem' }}>{result.error}</div>}
+                    {result.error && (
+                      <div style={{ marginTop: '0.4rem', color: 'var(--error)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        ⚠️ {result.error}
+                      </div>
+                    )}
                   </td>
-                  <td style={{ verticalAlign: 'top' }}>{result.phone}</td>
+                  <td style={{ verticalAlign: 'top', color: 'var(--text-main)', fontWeight: 500 }}>{result.phone}</td>
                   <td style={{ verticalAlign: 'top' }}>
                     <span className="status-badge" style={{ background: config.background, color: config.color }}>
-                      <StatusIcon size={14} /> {config.label}
+                      <StatusIcon size={12} /> {config.label}
                     </span>
                   </td>
-                  <td style={{ verticalAlign: 'top', color: 'var(--text-muted)' }}>
+                  <td style={{ verticalAlign: 'top', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     {result.timestamp ? new Date(result.timestamp).toLocaleString() : '-'}
                   </td>
-                  <td style={{ verticalAlign: 'top' }}>
-                    <div className="result-row-actions">
+                  <td style={{ verticalAlign: 'top', textAlign: 'right' }}>
+                    <div className="result-row-actions" style={{ justifyContent: 'flex-end' }}>
                       <button className="btn btn-secondary" onClick={() => handleCopyPhone(result.phone)}>
-                        <Copy size={14} /> Copy
+                        Copy
                       </button>
                       <a
                         className="btn btn-secondary"
@@ -142,8 +154,8 @@ const PostSendResultsSection = ({
             })}
             {sortedResults.length === 0 && (
               <tr>
-                <td colSpan="5" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No send results available yet.
+                <td colSpan="5" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  No send results available yet. Complete the campaign dispatch.
                 </td>
               </tr>
             )}

@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
 import FileDropzone from './FileDropzone';
 import { OUTLET_OPTIONS, isValidHttpUrl } from '../config/outlets';
 
@@ -20,75 +20,81 @@ const UploadSection = ({
 
   return (
     <div className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h2>{isLastVisitCampaign ? 'Upload Last Visit Data' : 'Upload Appointments Data'}</h2>
-        <button className="btn" onClick={onShowModal} style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          Manage Client List
-        </button>
+      <div className="app-header" style={{ borderBottom: 'none', marginBottom: '1.5rem', paddingBottom: 0 }}>
+        <div className="header-title-area">
+          <h2>{isLastVisitCampaign ? 'Configure Campaign & Upload Last Visit' : 'Configure Campaign & Upload Appointments'}</h2>
+          <p className="subtitle">Set your active outlet, select a campaign type, and import the export file.</p>
+        </div>
+        <div>
+          <button className="btn btn-secondary" onClick={onShowModal}>
+            Manage Client List
+          </button>
+        </div>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gap: '0.85rem',
-        marginBottom: '1rem',
-        padding: '1rem',
-        borderRadius: '14px',
-        border: '1px solid var(--glass-border)',
-        background: 'rgba(0,0,0,0.16)'
-      }}>
-        <label style={{ display: 'grid', gap: '0.35rem' }}>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 600 }}>Selected outlet</span>
-          <select
-            value={selectedOutletKey}
-            onChange={(event) => setSelectedOutletKey?.(event.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.75rem 0.9rem',
-              borderRadius: '8px',
-              border: '1px solid var(--glass-border)',
-              background: 'rgba(0,0,0,0.15)',
-              color: 'var(--text-primary)'
-            }}
-          >
-            {OUTLET_OPTIONS.map((outlet) => {
-              const outletReady = isValidHttpUrl(outlet.mapLink);
-              return (
-                <option key={outlet.key} value={outlet.key}>
-                  {outlet.name}{outletReady ? '' : ' (map link missing)'}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-        <p style={{ color: outletHasValidMapLink ? 'var(--text-muted)' : '#fca5a5', margin: 0 }}>
-          {outletHasValidMapLink
-            ? `Messages will use ${selectedOutletLabel} and its map link.`
-            : `${selectedOutletLabel} is missing a valid map link, so sending will stay blocked until it is fixed.`}
-        </p>
+      <div className="settings-card">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
+          {/* Campaign Mode Switcher */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <span className="template-editor-label">Campaign Type</span>
+            <div className="campaign-switcher">
+              <button
+                type="button"
+                className={`campaign-btn ${campaignMode === 'appointments' ? 'active' : ''}`}
+                onClick={() => setCampaignMode('appointments')}
+              >
+                Appointments Reminder
+              </button>
+              <button
+                type="button"
+                className={`campaign-btn ${campaignMode === 'last-visit' ? 'active' : ''}`}
+                onClick={() => setCampaignMode('last-visit')}
+              >
+                7-Day Follow-up
+              </button>
+            </div>
+          </div>
+
+          {/* Outlet Selection */}
+          <label className="custom-select-label">
+            <span className="template-editor-label">Selected Outlet</span>
+            <div className="select-wrapper">
+              <select
+                value={selectedOutletKey}
+                onChange={(event) => setSelectedOutletKey?.(event.target.value)}
+              >
+                {OUTLET_OPTIONS.map((outlet) => {
+                  const outletReady = isValidHttpUrl(outlet.mapLink);
+                  return (
+                    <option key={outlet.key} value={outlet.key}>
+                      {outlet.name}{outletReady ? '' : ' (map link missing)'}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </label>
+        </div>
+
+        {/* Selected Outlet Status Indicators */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+          {outletHasValidMapLink ? (
+            <div className="badge success">
+              <CheckCircle2 size={14} /> Map Link Validated
+            </div>
+          ) : (
+            <div className="badge error">
+              <AlertCircle size={14} /> Map Link Missing
+            </div>
+          )}
+          <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            {outletHasValidMapLink
+              ? `Messages will send with location "${selectedOutletLabel}" and its map link.`
+              : `Location "${selectedOutletLabel}" has an invalid/missing map link. Reprocessing will stay blocked.`}
+          </span>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <button
-          className={`btn ${campaignMode === 'appointments' ? '' : 'btn-ghost'}`}
-          onClick={() => setCampaignMode('appointments')}
-          style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
-        >
-          Appointments Reminder
-        </button>
-        <button
-          className={`btn ${campaignMode === 'last-visit' ? '' : 'btn-ghost'}`}
-          onClick={() => setCampaignMode('last-visit')}
-          style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
-        >
-          7-Day Last Visit Follow-up
-        </button>
-      </div>
-
-      <p className="subtitle">
-        {isLastVisitCampaign
-          ? 'Upload your daily Wessconnect Last Visit.csv export to target customers whose last visit was 7 days ago.'
-          : 'Upload your daily Fresha Appointments export below. Ensure your client list is up-to-date.'}
-      </p>
       <div className="upload-grid">
         <FileDropzone
           label={isLastVisitCampaign ? 'Wessconnect Last Visit.csv' : 'Exported Appointments'}
@@ -96,7 +102,8 @@ const UploadSection = ({
           setFile={setApptsFile}
         />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
         <button className="btn" disabled={!apptsFile} onClick={onProcess}>
           {isLastVisitCampaign ? 'Process Last Visit Campaign' : 'Process Appointments'} <ArrowRight size={18} />
         </button>
