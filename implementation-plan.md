@@ -1,111 +1,116 @@
-### Implementation Plan: New Workflow Redesign
+### Implementation Plan: Outlet + Map Link Safety
 
-This plan outlines the steps to implement the redesigned workflow in the project, incorporating the user's feedback for decoupled client list upload, default preview, and streamlined sending.
+This plan focuses on preventing message mistakes where place/map link is not updated.
 
-### Phase 1: Backend Modifications
+### Scope
 
-1.  **Create Endpoint for Client List Upload (`/api/upload-clients`)**
-    *   **Objective:** Develop a dedicated API endpoint to receive and process the "Customer List" CSV.
-    *   **Details:**
-        *   Implement file upload handling (using `multer`, if already present, or similar).
-        *   Parse the CSV file to extract client information.
-        *   Store the processed client data in a persistent storage mechanism. For this plan, we will assume a simple JSON file storage (`data/clients.json`).
-        *   Implement basic validation and deduplication logic for client entries.
-        *   Provide appropriate API responses (success/failure, validation errors).
-    *   **Files Affected:** `server.js`, potentially new file `services/clientDataStore.js`, new directory `data/clients.json`.
+- Add controlled outlet selection (Bangsar, KLGCC, SS2).
+- Add template placeholders for outlet name and map link.
+- Block sending if outlet data or placeholders are invalid.
+- Show clear preview and warnings before send.
 
-2.  **Modify Appointments Upload Endpoint (`/api/upload`)**
-    *   **Objective:** Update the existing endpoint to exclusively handle "Appointments" CSVs and integrate with the stored client data.
-    *   **Details:**
-        *   Ensure the endpoint expects and processes only the "Appointments" CSV.
-        *   Load the client data from the persistent storage (`data/clients.json`) before processing appointments.
-        *   Use the loaded client data to link appointments to clients and generate personalized messages.
-        *   Refine error handling for cases where client data is missing or incomplete.
-    *   **Files Affected:** `server.js`, `services/csvProcessor.js`.
+### Assumptions
 
-### Phase 2: Frontend Modifications
+- Feature targets appointment campaign first.
+- Existing templates continue to work, but users are encouraged to migrate to new placeholders.
 
-1.  **Create Dedicated Client List Upload UI**
-    *   **Objective:** Develop a new user interface element for uploading and managing the "Customer List."
-    *   **Details:**
-        *   Design a dedicated section or modal (e.g., within a "Settings" page or a new "Clients" tab) for client list upload.
-        *   Provide clear labels and instructions for uploading the "Customer List" CSV, emphasizing its infrequent update nature (e.g., "Upload Client List (Update weekly or as needed)").
-        *   Implement client-side logic to handle file selection and upload to the new `/api/upload-clients` endpoint.
-        *   Display feedback to the user on the success or failure of the client list upload.
-    *   **Files Affected:** `frontend/src/App.jsx` (for routing/modal integration), new component file (e.g., `frontend/src/components/ClientUpload.jsx`), `frontend/src/index.css` (for styling).
+### Delivery Phases
 
-2.  **Update Appointments Upload UI**
-    *   **Objective:** Refine the main upload interface to clearly indicate it is for "Appointments" only.
-    *   **Details:**
-        *   Modify existing labels and instructions in the main upload area to refer specifically to "Appointments CSV."
-        *   Potentially simplify the drag-and-drop zone if it no longer needs to handle two distinct file types simultaneously.
-    *   **Files Affected:** `frontend/src/App.jsx` (or relevant upload component).
+#### Phase 1: Foundation (Config + Backend Rendering)
 
-3.  **Remove Mode Selection UI**
-    *   **Objective:** Eliminate the UI elements that allow the user to choose between "Preview Scripts" and "Auto-Send."
-    *   **Details:**
-        *   Remove any radio buttons, dropdowns, or navigation related to mode selection.
-        *   The application should now automatically transition to the preview state after processing appointments.
-    *   **Files Affected:** `frontend/src/App.jsx` (or relevant mode selection component).
+- [x] Add outlet config source (`name`, `mapLink`) in `services/config/outlets.js`.
+    - Estimate: 0.5h
+    - Dependency: none
+- [x] Extend message rendering to support `{{outletName}}` and `{{outletMapLink}}`.
+    - Files: `services/templates/templateRenderer.js`, `services/messageBuilder.js`
+    - Estimate: 1h
+    - Dependency: outlet config exists
+- [x] Keep backward compatibility for templates that do not include new placeholders.
+    - Estimate: 0.25h
+    - Dependency: rendering update
 
-4.  **Implement Default Preview Display**
-    *   **Objective:** After processing "Appointments" data, automatically display the generated messages for review.
-    *   **Details:**
-        *   Ensure the "Preview Scripts" view is the default next step after a successful "Appointments" CSV upload and processing.
-        *   This view should clearly present the messages generated for each client.
-    *   **Files Affected:** `frontend/src/App.jsx` (or relevant preview component).
+#### Phase 2: Validation Gate (Hard Stop on Send)
 
-5.  **Add "Start Sending" Button**
-    *   **Objective:** Provide a clear call-to-action button to initiate the automated sending process.
-    *   **Details:**
-        *   Add a prominent "Start Sending via WhatsApp" or "Broadcast Messages" button to the "Preview Scripts" view.
-        *   This button will trigger the sequence of WhatsApp authentication and message broadcasting.
-    *   **Files Affected:** `frontend/src/App.jsx` (or relevant preview component).
+- [x] Add preflight validator utility (e.g. `services/templates/templateValidation.js`).
+    - Checks:
+        - Selected outlet exists in config
+        - Outlet map link is valid and non-empty
+        - Final rendered messages contain no unresolved `{{...}}` placeholders
+    - Estimate: 1h
+    - Dependency: Phase 1
+- [x] Enforce validation in send entry route.
+    - File: `routes/sendingRoutes.js`
+    - Behavior: return HTTP 400 with actionable error if validation fails
+    - Estimate: 0.75h
+    - Dependency: validator utility
 
-6.  **Integrate WhatsApp Authentication with "Start Sending"**
-    *   **Objective:** Ensure WhatsApp authentication occurs as part of, or just before, the automatic sending process.
-    *   **Details:**
-        *   When the "Start Sending" button is clicked, check the WhatsApp client status.
-        *   If not authenticated, display the QR code for the user to scan.
-        *   Only proceed with message broadcasting once the WhatsApp client is ready (authenticated).
-    *   **Files Affected:** `frontend/src/App.jsx`, `frontend/src/services/whatsappService.js` (if exists, or new file).
+#### Phase 3: Frontend UX (Prevent User Error Early)
 
-7.  **Enhance Broadcast UI**
-    *   **Objective:** Improve user feedback and visibility during the message broadcasting phase.
-    *   **Details:**
-        *   Implement real-time progress indicators (e.g., "X of Y messages sent").
-        *   Display a clear message or banner reminding the user to "Keep the app running until finished."
-        *   Show detailed logs or status updates for each message sent.
-    *   **Files Affected:** `frontend/src/App.jsx` (or relevant broadcast component).
+- [x] Add required outlet selector in upload/preview flow.
+    - Files: `frontend/src/components/UploadSection.jsx` (or `PreviewSection.jsx`), `frontend/src/hooks/useWhatsAppAutomation.js`
+    - Estimate: 1.5h
+    - Dependency: outlet config endpoint/availability strategy decided
+- [x] Pass selected outlet to backend when starting send.
+    - File: `frontend/src/hooks/useWhatsAppAutomation.js`
+    - Estimate: 0.5h
+    - Dependency: route contract update
+- [x] Disable Start Sending until outlet is selected and preflight passes.
+    - File: `frontend/src/components/PreviewSection.jsx`
+    - Estimate: 0.75h
+    - Dependency: validation feedback contract
+- [x] Update template editor placeholder help to include new placeholders.
+    - File: `frontend/src/components/TemplateEditorModal.jsx`
+    - Estimate: 0.25h
+    - Dependency: Phase 1 placeholders finalized
 
-### Phase 3: Data Persistence (for Client List)
+> Note: Bangsar is fully wired. KLGCC and SS2 are selectable in the UI, but their backend map links still need real URLs before those outlets can pass preflight and be sent.
 
-1.  **Choose and Implement Client Data Storage**
-    *   **Objective:** Establish a robust method for storing and retrieving client data on the backend.
-    *   **Details:**
-        *   Initial proposal: Use a JSON file (`data/clients.json`) to store the client list.
-        *   Implement functions to read from and write to this JSON file.
-        *   Ensure data is loaded into memory on backend startup for quick access during appointment processing.
-    *   **Files Affected:** New directory `data/`, `data/clients.json`, `server.js`, `services/clientDataStore.js` (new file).
+#### Phase 4: Optional Nice-to-Haves
 
-### High-Level Task Breakdown & Tool Usage
+- [ ] Add template lint warnings on save (warn if hardcoded outlet names detected).
+    - File: `routes/templateRoutes.js`
+    - Estimate: 1h
+    - Dependency: Phase 2 validator patterns
+- [ ] Add a "Selected outlet" summary card above preview list.
+    - File: `frontend/src/components/PreviewSection.jsx`
+    - Estimate: 0.5h
+    - Dependency: outlet selector
 
-*   **Backend Changes:**
-    *   Create new API endpoint and logic for client list (`server.js`, `clientDataStore.js`, `data/clients.json`).
-    *   Modify existing API endpoint for appointments (`server.js`, `csvProcessor.js`).
-    *   **Tools:** `write_file`, `replace`
+### API Contract Changes
 
-*   **Frontend Changes:**
-    *   Create UI for client list upload (`App.jsx`, `ClientUpload.jsx`, `index.css`).
-    *   Update main upload UI (`App.jsx`).
-    *   Remove mode selection UI (`App.jsx`).
-    *   Implement default preview and "Start Sending" button (`App.jsx`, preview component).
-    *   Integrate WhatsApp auth with sending (`App.jsx`, `whatsappService.js`).
-    *   Enhance broadcast UI (`App.jsx`, broadcast component).
-    *   **Tools:** `write_file`, `replace`
+- `POST /api/start-sending`
+    - New request field: `selectedOutletKey`
+    - Validation errors example:
+        - `Outlet is required before sending.`  
+        - `Unknown outlet "...".`
+        - `Message template has unresolved placeholders.`
 
-*   **Verification:**
-    *   Manual testing of the entire workflow.
-    *   **Tools:** `run_shell_command` (`npm run start-all`)
+### Testing Checklist
 
-I will now save this implementation plan to `implementation-plan.md`.
+- [x] Unit: rendering replaces `{{outletName}}` and `{{outletMapLink}}` correctly.
+- [ ] Unit: validator rejects unknown outlet and unresolved placeholders.
+- [ ] Integration: send starts successfully with valid outlet and template.
+- [ ] Integration: send blocked when outlet missing.
+- [ ] Integration: send blocked when template contains unresolved placeholders.
+- [ ] Manual QA: switch between Bangsar/KLGCC/SS2 and verify preview links change.
+
+### Rollout and Risk Control
+
+- Rollout step 1: deploy backend with backward-compatible rendering + validation disabled in warning mode.
+- Rollout step 2: enable strict blocking after team template update.
+- Rollout step 3: train users to use outlet placeholders, not hardcoded outlet text.
+
+### Definition of Done
+
+- Sending cannot start without valid outlet selection.
+- Preview always displays the selected outlet and correct map link.
+- Backend blocks unresolved placeholders as final safety net.
+- Team can safely use one template without manual outlet/map edits.
+
+### Suggested Execution Order (Fastest Path)
+
+1. Phase 1 tasks (rendering + placeholders)
+2. Phase 2 tasks (preflight block)
+3. Phase 3 tasks (selector + disable send)
+4. Testing checklist
+5. Optional Phase 4 polish

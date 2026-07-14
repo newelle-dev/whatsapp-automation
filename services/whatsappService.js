@@ -1,16 +1,73 @@
 const qrcodeUrl = require('qrcode');
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const fs = require('fs');
+const path = require('path');
 
 const INITIALIZE_RETRY_DELAY_MS = 1500;
 const INITIALIZE_MAX_ATTEMPTS = 2;
 
+function firstExistingPath(candidates) {
+    return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
+}
+
+function resolveBrowserExecutablePath() {
+    const envPath = firstExistingPath([
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        process.env.CHROME_BIN,
+        process.env.GOOGLE_CHROME_BIN,
+        process.env.EDGE_BIN
+    ]);
+
+    if (envPath) {
+        return envPath;
+    }
+
+    if (process.platform !== 'win32') {
+        return null;
+    }
+
+    return firstExistingPath([
+        path.join(process.env.PROGRAMFILES || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env['PROGRAMFILES(X86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env.PROGRAMFILES || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        path.join(process.env['PROGRAMFILES(X86)'] || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Edge', 'Application', 'msedge.exe')
+    ]);
+}
+
+function addSpawnUnknownHint(error) {
+    const message = String(error?.message || error || '');
+
+    if (!message.includes('spawn UNKNOWN')) {
+        return error;
+    }
+
+    const hint = 'Browser launch failed (spawn UNKNOWN). Ensure Chrome or Edge is installed, set PUPPETEER_EXECUTABLE_PATH if needed, and use a Node.js LTS release.';
+
+    if (error instanceof Error) {
+        error.message = `${error.message}. ${hint}`;
+        return error;
+    }
+
+    return new Error(`${message}. ${hint}`);
+}
+
 function createWhatsAppClient() {
+    const executablePath = resolveBrowserExecutablePath();
+
+    const puppeteerOptions = {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    };
+
+    if (executablePath) {
+        puppeteerOptions.executablePath = executablePath;
+    }
+
     return new Client({
         authStrategy: new LocalAuth(),
-        puppeteer: {
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        }
+        puppeteer: puppeteerOptions
     });
 }
 
@@ -95,16 +152,17 @@ async function initializeWhatsApp({ state, io }) {
                 await client.initialize();
                 return client;
             } catch (error) {
+                const normalizedError = addSpawnUnknownHint(error);
                 const shouldRetry = isTransientInitializeError(error) && attempt < INITIALIZE_MAX_ATTEMPTS;
 
-                console.error(`WhatsApp initialization failed on attempt ${attempt}:`, error);
+                console.error(`WhatsApp initialization failed on attempt ${attempt}:`, normalizedError);
                 await destroyWhatsAppClient(state);
 
                 if (!shouldRetry) {
                     state.isAuthReady = false;
                     io.emit('ready', false);
                     io.emit('auth', 'failed');
-                    throw error;
+                    throw normalizedError;
                 }
 
                 await new Promise((resolve) => setTimeout(resolve, INITIALIZE_RETRY_DELAY_MS));

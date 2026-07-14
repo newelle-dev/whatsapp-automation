@@ -1,8 +1,39 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import {
+  DEFAULT_OUTLET_KEY,
+  getDefaultOutlet,
+  getOutletByKey,
+  isValidHttpUrl
+} from '../config/outlets';
 
-const DEFAULT_TEMPLATE = 'Hello {{name}}, this is a reminder for {{service}} on {{date}} at {{time}}.';
+const DEFAULT_APPOINTMENT_TEMPLATE = `Hi {{name}},
+
+Greetings from {{outletName}}✨
+
+This is a friendly reminder of your upcoming appointment:
+
+📅 Date: {{day}}, {{date}}
+⏰ Time: {{time}}
+💇 Service: {{service}}
+
+To secure your slot, kindly reply:
+✔ Y – to confirm
+❌ NO – to cancel
+
+⏰ Please confirm. Unconfirmed slots may be released to clients on our waitlist.
+
+Location Reminder:
+🏢 {{outletName}}
+📍{{outletMapLink}}
+
+📣 As our stylists have limited availability during this period, your confirmation is greatly appreciated.
+
+Thank you and have a wonderful day! 😊
+
+Warm regards,
+176 Avenue ✨`;
 const LAST_VISIT_DEFAULT_TEMPLATE = `Hi {{name}},
 
 We're just checking in to see how your recent service experience was. We hope you're enjoying the results 😊
@@ -15,7 +46,9 @@ const DEFAULT_PREVIEW_DATA = {
   service: 'Appointment',
   time: '10:00 AM',
   date: 'Monday, April 25, 2026',
-  day: 'Monday'
+  day: 'Monday',
+  outletName: getDefaultOutlet().name,
+  outletMapLink: getDefaultOutlet().mapLink
 };
 
 const normalizeText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -29,6 +62,8 @@ const createPreviewKey = (item, index) => [
   item.time || '',
   item.date || '',
   item.day || '',
+  item.outletName || '',
+  item.outletMapLink || '',
   item.branch || '',
   item.lastVisitDate || '',
   index
@@ -42,9 +77,13 @@ const replaceAllOccurrences = (text, searchText, replacementText) => {
   return text.split(searchText).join(replacementText);
 };
 
-const renderPreviewMessage = (item, template) => {
+const hasUnresolvedPlaceholders = (text) => /\{\{[^{}]+\}\}/.test(String(text || ''));
+
+const renderPreviewMessage = (item, template, selectedOutlet) => {
   const recipientName = normalizeText(item.displayName || item.name || 'Client');
   const originalRecipientName = normalizeText(item.originalDisplayName || item.originalName || item.name || item.displayName || '');
+  const outletName = normalizeText(item.outletName || selectedOutlet?.name || getDefaultOutlet().name);
+  const outletMapLink = normalizeText(item.outletMapLink || (selectedOutlet ? selectedOutlet.mapLink : getDefaultOutlet().mapLink));
 
   if (!template) {
     return replaceAllOccurrences(item.message || '', originalRecipientName, recipientName) || item.message || '';
@@ -55,7 +94,9 @@ const renderPreviewMessage = (item, template) => {
       .replace(/\{\{name\}\}/g, recipientName)
       .replace(/\{\{lastVisitDate\}\}/g, item.lastVisitDate || '')
       .replace(/\{\{daysSinceVisit\}\}/g, String(item.daysSinceVisit || 7))
-      .replace(/\{\{branch\}\}/g, item.branch || '');
+      .replace(/\{\{branch\}\}/g, item.branch || '')
+      .replace(/\{\{outletName\}\}/g, outletName)
+      .replace(/\{\{outletMapLink\}\}/g, outletMapLink);
   }
 
   return template
@@ -63,7 +104,9 @@ const renderPreviewMessage = (item, template) => {
     .replace(/\{\{service\}\}/g, item.service || 'your appointment')
     .replace(/\{\{time\}\}/g, item.time || 'the scheduled time')
     .replace(/\{\{date\}\}/g, item.date || 'the scheduled date')
-    .replace(/\{\{day\}\}/g, item.day || 'the scheduled day');
+    .replace(/\{\{day\}\}/g, item.day || 'the scheduled day')
+    .replace(/\{\{outletName\}\}/g, outletName)
+    .replace(/\{\{outletMapLink\}\}/g, outletMapLink);
 };
 
 const stripPreviewMetadata = (item) => {
@@ -90,7 +133,7 @@ const stripSendResultMetadata = (item) => {
   return stripPreviewMetadata(payload);
 };
 
-const applyPreviewState = (queues, templateContent, previewEdits) => {
+const applyPreviewState = (queues, templateContent, previewEdits, selectedOutlet) => {
   const decorateItem = (item, index) => {
     const previewKey = item.previewKey || createPreviewKey(item, index);
     const edit = previewEdits[previewKey] || {};
@@ -100,10 +143,12 @@ const applyPreviewState = (queues, templateContent, previewEdits) => {
       originalDisplayName: item.originalDisplayName || item.displayName || item.name || '',
       originalName: item.originalName || item.name || item.displayName || '',
       displayName: edit.name ? edit.name : (item.displayName || item.name || ''),
-      isExcluded: Boolean(edit.excluded)
+      isExcluded: Boolean(edit.excluded),
+      outletName: item.outletName || selectedOutlet?.name || getDefaultOutlet().name,
+      outletMapLink: item.outletMapLink || selectedOutlet?.mapLink || getDefaultOutlet().mapLink
     };
 
-    nextItem.message = renderPreviewMessage(nextItem, templateContent);
+    nextItem.message = renderPreviewMessage(nextItem, templateContent, selectedOutlet);
     return nextItem;
   };
 
@@ -118,6 +163,7 @@ const socket = io('http://localhost:3000');
 export const useWhatsAppAutomation = () => {
   const [step, setStep] = useState(1);
   const [campaignMode, setCampaignMode] = useState('appointments');
+  const [selectedOutletKey, setSelectedOutletKey] = useState(DEFAULT_OUTLET_KEY);
   const [clientsFile, setClientsFile] = useState(null);
   const [apptsFile, setApptsFile] = useState(null);
   const [showClientUploadModal, setShowClientUploadModal] = useState(false);
@@ -127,6 +173,7 @@ export const useWhatsAppAutomation = () => {
   const [templateLoading, setTemplateLoading] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateError, setTemplateError] = useState('');
+  const [templateWarnings, setTemplateWarnings] = useState([]);
   const [previewEdits, setPreviewEdits] = useState({});
   const [pendingSendQueue, setPendingSendQueue] = useState([]);
   const [queues, setQueues] = useState({ sendingQueue: [], manualReviewQueue: [] });
@@ -143,24 +190,31 @@ export const useWhatsAppAutomation = () => {
     setTemplateLoading(true);
     setTemplateError('');
     const isLastVisitCampaign = mode === 'last-visit';
-    const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
+    const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_APPOINTMENT_TEMPLATE;
 
     try {
       const res = await axios.get('http://localhost:3000/api/template', {
         params: { campaign: isLastVisitCampaign ? 'last-visit' : 'appointments' }
       });
       setTemplateContent(res.data.template || fallbackTemplate);
+      setTemplateWarnings(Array.isArray(res.data.warnings) ? res.data.warnings : []);
     } catch (err) {
       setTemplateError(err.response?.data?.error || 'Failed to load message template.');
       setTemplateContent(fallbackTemplate);
+      setTemplateWarnings([]);
     } finally {
       setTemplateLoading(false);
     }
   }, [campaignMode]);
 
+  const selectedOutlet = useMemo(
+    () => getOutletByKey(selectedOutletKey),
+    [selectedOutletKey]
+  );
+
   const queuesWithPreview = useMemo(
-    () => applyPreviewState(queues, templateContent, previewEdits),
-    [queues, previewEdits, templateContent]
+    () => applyPreviewState(queues, templateContent, previewEdits, selectedOutlet),
+    [queues, previewEdits, selectedOutlet, templateContent]
   );
 
   const updatePreviewName = (previewKey, nextName) => {
@@ -214,7 +268,10 @@ export const useWhatsAppAutomation = () => {
     setSendResults([]);
     setSendSummary({ total: queueToSend.length, sent: 0, failed: 0 });
     setProgress({ current: 0, total: queueToSend.length });
-    await axios.post('http://localhost:3000/api/start-sending', { queue: queueToSend });
+    await axios.post('http://localhost:3000/api/start-sending', {
+      queue: queueToSend,
+      selectedOutletKey
+    });
   };
 
   const handleRetryFailed = async () => {
@@ -323,6 +380,7 @@ export const useWhatsAppAutomation = () => {
         campaign: isLastVisitCampaign ? 'last-visit' : 'appointments'
       });
       setTemplateContent(res.data.template || nextTemplate);
+      setTemplateWarnings(Array.isArray(res.data.warnings) ? res.data.warnings : []);
 
       if (Array.isArray(res.data.sendingQueue) || Array.isArray(res.data.manualReviewQueue)) {
         setQueues({
@@ -345,7 +403,7 @@ export const useWhatsAppAutomation = () => {
     setTemplateSaving(true);
     setTemplateError('');
     const isLastVisitCampaign = campaignMode === 'last-visit';
-    const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
+    const fallbackTemplate = isLastVisitCampaign ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_APPOINTMENT_TEMPLATE;
 
     try {
       const res = await axios.post('http://localhost:3000/api/template', {
@@ -353,6 +411,7 @@ export const useWhatsAppAutomation = () => {
         campaign: isLastVisitCampaign ? 'last-visit' : 'appointments'
       });
       setTemplateContent(res.data.template || fallbackTemplate);
+      setTemplateWarnings(Array.isArray(res.data.warnings) ? res.data.warnings : []);
 
       if (Array.isArray(res.data.sendingQueue) || Array.isArray(res.data.manualReviewQueue)) {
         setQueues({
@@ -368,13 +427,43 @@ export const useWhatsAppAutomation = () => {
     }
   };
 
-  const templatePreviewData = queuesWithPreview.sendingQueue.find((item) => !item.isExcluded)
-    || queuesWithPreview.manualReviewQueue.find((item) => !item.isExcluded)
-    || DEFAULT_PREVIEW_DATA;
+  const templatePreviewData = useMemo(() => {
+    const previewSource = queuesWithPreview.sendingQueue.find((item) => !item.isExcluded)
+      || queuesWithPreview.manualReviewQueue.find((item) => !item.isExcluded)
+      || DEFAULT_PREVIEW_DATA;
+
+    return {
+      ...DEFAULT_PREVIEW_DATA,
+      ...previewSource,
+      outletName: selectedOutlet?.name || previewSource.outletName || DEFAULT_PREVIEW_DATA.outletName,
+      outletMapLink: selectedOutlet ? selectedOutlet.mapLink : (previewSource.outletMapLink || DEFAULT_PREVIEW_DATA.outletMapLink)
+    };
+  }, [queuesWithPreview, selectedOutlet]);
 
   const activeSendQueue = queuesWithPreview.sendingQueue
     .filter((item) => !item.isExcluded)
     .map(stripPreviewMetadata);
+
+  const sendReadiness = useMemo(() => {
+    if (activeSendQueue.length === 0) {
+      return { canStartSending: false, reason: 'Please keep at least one recipient in the send list.' };
+    }
+
+    if (!selectedOutlet) {
+      return { canStartSending: false, reason: 'Select an outlet before sending.' };
+    }
+
+    if (!isValidHttpUrl(selectedOutlet.mapLink)) {
+      return { canStartSending: false, reason: `Selected outlet "${selectedOutlet.name}" is missing a valid map link.` };
+    }
+
+    const unresolvedItem = activeSendQueue.find((item) => hasUnresolvedPlaceholders(item.message));
+    if (unresolvedItem) {
+      return { canStartSending: false, reason: 'Message template has unresolved placeholders.' };
+    }
+
+    return { canStartSending: true, reason: '' };
+  }, [activeSendQueue, selectedOutlet]);
 
   const handleFileUpload = async (reprocessFile = null) => {
     const fileToUpload = reprocessFile || apptsFile;
@@ -446,8 +535,8 @@ export const useWhatsAppAutomation = () => {
   };
 
   const handleStartSending = async () => {
-    if (activeSendQueue.length === 0) {
-      return alert('Please keep at least one recipient in the send list.');
+    if (!sendReadiness.canStartSending) {
+      return alert(sendReadiness.reason);
     }
 
     setPendingSendQueue(activeSendQueue);
@@ -484,6 +573,8 @@ export const useWhatsAppAutomation = () => {
   return {
     step, setStep,
     campaignMode, setCampaignMode,
+    selectedOutletKey, setSelectedOutletKey,
+    selectedOutlet,
     clientsFile, setClientsFile,
     apptsFile, setApptsFile,
     showClientUploadModal, setShowClientUploadModal,
@@ -493,7 +584,9 @@ export const useWhatsAppAutomation = () => {
     templateLoading,
     templateSaving,
     templateError,
+    templateWarnings,
     templatePreviewData,
+    sendReadiness,
     openTemplateEditor,
     closeTemplateEditor,
     saveTemplate,

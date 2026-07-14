@@ -6,18 +6,50 @@ const PLACEHOLDERS = [
   { key: '{{service}}', label: 'Service' },
   { key: '{{time}}', label: 'Time' },
   { key: '{{date}}', label: 'Date' },
-  { key: '{{day}}', label: 'Day' }
+  { key: '{{day}}', label: 'Day' },
+  { key: '{{outletName}}', label: 'Selected outlet name' },
+  { key: '{{outletMapLink}}', label: 'Selected outlet map link' }
 ];
 
-const DEFAULT_TEMPLATE = 'Hello {{name}}, this is a reminder for {{service}} on {{date}} at {{time}}.';
+const DEFAULT_TEMPLATE = `Hi {{name}},
+
+Greetings from {{outletName}}✨
+
+This is a friendly reminder of your upcoming appointment:
+
+📅 Date: {{day}}, {{date}}
+⏰ Time: {{time}}
+💇 Service: {{service}}
+
+To secure your slot, kindly reply:
+✔ Y – to confirm
+❌ NO – to cancel
+
+⏰ Please confirm. Unconfirmed slots may be released to clients on our waitlist.
+
+Location Reminder:
+🏢 {{outletName}}
+📍{{outletMapLink}}
+
+📣 As our stylists have limited availability during this period, your confirmation is greatly appreciated.
+
+Thank you and have a wonderful day! 😊
+
+Warm regards,
+176 Avenue ✨`;
 
 const substituteTemplate = (template, data) => {
+  const outletName = data.outletName || '176 Avenue @ Bangsar';
+  const outletMapLink = data.outletMapLink || 'https://maps.app.goo.gl/9jSejq5iw6cToF8P8';
+
   return template
     .replace(/\{\{name\}\}/g, data.displayName || data.name || 'Client')
     .replace(/\{\{service\}\}/g, data.service || 'your appointment')
     .replace(/\{\{time\}\}/g, data.time || 'the scheduled time')
     .replace(/\{\{date\}\}/g, data.date || 'the scheduled date')
-    .replace(/\{\{day\}\}/g, data.day || 'the scheduled day');
+    .replace(/\{\{day\}\}/g, data.day || 'the scheduled day')
+    .replace(/\{\{outletName\}\}/g, outletName)
+    .replace(/\{\{outletMapLink\}\}/g, outletMapLink);
 };
 
 export default function TemplateEditorModal({
@@ -26,6 +58,7 @@ export default function TemplateEditorModal({
   loading,
   saving,
   error,
+  warnings,
   onSave,
   onCancel,
   onReset
@@ -94,6 +127,16 @@ export default function TemplateEditorModal({
               </button>
             </div>
             {error && <p className="template-editor-error">{error}</p>}
+            {Array.isArray(warnings) && warnings.length > 0 && (
+              <div className="template-editor-warning-block">
+                <p className="template-help-title">Template warnings</p>
+                <ul className="template-editor-warning-list">
+                  {warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div className="template-editor-panel template-preview-panel">
@@ -111,7 +154,7 @@ export default function TemplateEditorModal({
                 ))}
               </div>
               <p className="template-help-note">
-                Preview uses the first queued appointment when available, otherwise a sample reminder.
+                Preview uses the first queued appointment when available, otherwise a sample reminder. Use the outlet placeholders to keep one template reusable across Bangsar, KLGCC, and SS2.
               </p>
             </div>
           </div>

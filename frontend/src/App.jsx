@@ -13,6 +13,8 @@ function App() {
   const {
     step,
     campaignMode, setCampaignMode,
+    selectedOutletKey, setSelectedOutletKey,
+    selectedOutlet,
     clientsFile, setClientsFile,
     apptsFile, setApptsFile,
     showClientUploadModal, setShowClientUploadModal,
@@ -22,7 +24,9 @@ function App() {
     templateLoading,
     templateSaving,
     templateError,
+    templateWarnings,
     templatePreviewData,
+    sendReadiness,
     openTemplateEditor,
     closeTemplateEditor,
     saveTemplate,
@@ -60,6 +64,9 @@ function App() {
         <UploadSection 
           campaignMode={campaignMode}
           setCampaignMode={setCampaignMode}
+          selectedOutletKey={selectedOutletKey}
+          setSelectedOutletKey={setSelectedOutletKey}
+          selectedOutlet={selectedOutlet}
           apptsFile={apptsFile}
           setApptsFile={setApptsFile}
           onProcess={() => handleFileUpload()}
@@ -92,6 +99,7 @@ function App() {
           loading={templateLoading}
           saving={templateSaving}
           error={templateError}
+          warnings={templateWarnings}
           onSave={saveTemplate}
           onCancel={closeTemplateEditor}
           onReset={resetTemplate}
@@ -101,6 +109,9 @@ function App() {
       {step === 2 && (
         <PreviewSection 
           queues={queues}
+          selectedOutlet={selectedOutlet}
+          canStartSending={sendReadiness.canStartSending}
+          sendDisabledReason={sendReadiness.reason}
           onStartSending={handleStartSending}
           onEditRecipientName={updatePreviewName}
           onToggleRecipientExclusion={togglePreviewExclusion}

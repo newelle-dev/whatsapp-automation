@@ -1,4 +1,5 @@
 const express = require('express');
+const { lintTemplateForHardcodedOutlets } = require('../services/templates/templateValidation');
 
 function createTemplateRoutes({
     state,
@@ -19,7 +20,7 @@ function createTemplateRoutes({
             const templateFile = campaign === 'last-visit' ? LAST_VISIT_TEMPLATE_FILE : TEMPLATE_FILE;
             const fallbackTemplate = campaign === 'last-visit' ? LAST_VISIT_DEFAULT_TEMPLATE : DEFAULT_TEMPLATE;
             const template = readTemplate(templateFile) || fallbackTemplate;
-            res.json({ template });
+            res.json({ template, warnings: lintTemplateForHardcodedOutlets(template) });
         } catch (err) {
             res.status(500).json({ error: 'Failed to load message template.' });
         }
@@ -37,6 +38,8 @@ function createTemplateRoutes({
 
             await writeTemplate(template, templateFile);
 
+            const warnings = lintTemplateForHardcodedOutlets(template);
+
             state.sendingQueue = state.sendingQueue.map((item) => ({
                 ...item,
                 message: buildMessageForItem(item)
@@ -47,11 +50,18 @@ function createTemplateRoutes({
                 message: buildMessageForItem(item)
             }));
 
-            addLog('Message template updated successfully.');
+            if (warnings.length > 0) {
+                addLog(`Message template updated with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`);
+            } else {
+                addLog('Message template updated successfully.');
+            }
             res.json({
-                message: 'Template updated successfully.',
+                message: warnings.length > 0
+                    ? `Template updated with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}.`
+                    : 'Template updated successfully.',
                 template,
                 campaign: campaignType,
+                warnings,
                 sendingQueue: state.sendingQueue,
                 manualReviewQueue: state.manualReviewQueue
             });

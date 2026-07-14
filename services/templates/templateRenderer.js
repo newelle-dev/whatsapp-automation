@@ -4,23 +4,34 @@ const {
     LAST_VISIT_TEMPLATE_FILE
 } = require('../parsers/columnNames');
 const { renderLastVisitTemplate } = require('../campaigns/lastVisitCampaign');
+const { resolveOutletContext } = require('../config/outlets');
+
+function replaceTemplateTokens(template, replacements) {
+    return Object.entries(replacements).reduce((nextTemplate, [token, value]) => (
+        nextTemplate.replace(new RegExp(`\\{\\{${token}\\}\\}`, 'g'), value == null ? '' : String(value))
+    ), template);
+}
+
+function getAppointmentTemplateReplacements(payload = {}) {
+    const outlet = resolveOutletContext(payload);
+
+    return {
+        name: payload.displayName || payload.name || 'Client',
+        service: payload.service || 'your appointment',
+        time: payload.time || 'the scheduled time',
+        date: payload.date || 'the scheduled date',
+        day: payload.day || 'the scheduled day',
+        outletName: outlet.name,
+        outletMapLink: outlet.mapLink
+    };
+}
 
 function prepareTemplate(payload, templateFile) {
-    if (!fs.existsSync(templateFile)) {
-        return DEFAULT_TEMPLATE
-            .replace(/\{\{name\}\}/g, payload.displayName)
-            .replace(/\{\{service\}\}/g, payload.service)
-            .replace(/\{\{time\}\}/g, payload.time)
-            .replace(/\{\{date\}\}/g, payload.date)
-            .replace(/\{\{day\}\}/g, payload.day);
-    }
-    let template = fs.readFileSync(templateFile, 'utf8');
-    template = template.replace(/\{\{name\}\}/g, payload.displayName);
-    template = template.replace(/\{\{service\}\}/g, payload.service);
-    template = template.replace(/\{\{time\}\}/g, payload.time);
-    template = template.replace(/\{\{date\}\}/g, payload.date);
-    template = template.replace(/\{\{day\}\}/g, payload.day);
-    return template;
+    const template = fs.existsSync(templateFile)
+        ? fs.readFileSync(templateFile, 'utf8')
+        : DEFAULT_TEMPLATE;
+
+    return replaceTemplateTokens(template, getAppointmentTemplateReplacements(payload));
 }
 
 function prepareLastVisitTemplate(payload, templateFile = LAST_VISIT_TEMPLATE_FILE) {
@@ -29,5 +40,7 @@ function prepareLastVisitTemplate(payload, templateFile = LAST_VISIT_TEMPLATE_FI
 
 module.exports = {
     prepareTemplate,
-    prepareLastVisitTemplate
+    prepareLastVisitTemplate,
+    replaceTemplateTokens,
+    getAppointmentTemplateReplacements
 };

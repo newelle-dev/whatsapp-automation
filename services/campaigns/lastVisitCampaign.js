@@ -1,6 +1,7 @@
 const fs = require('fs');
 const csv = require('csv-parser');
 const { formatPhone } = require('../../utils/formatter');
+const { resolveOutletContext } = require('../config/outlets');
 const {
     LAST_VISIT_TEMPLATE_FILE,
     LAST_VISIT_DEFAULT_TEMPLATE,
@@ -12,6 +13,12 @@ const {
 } = require('../parsers/columnNames');
 const { startOfLocalDay, parseDateDMY, diffInDays } = require('../utils/dateUtils');
 
+function replaceTemplateTokens(template, replacements) {
+    return Object.entries(replacements).reduce((nextTemplate, [token, value]) => (
+        nextTemplate.replace(new RegExp(`\\{\\{${token}\\}\\}`, 'g'), value == null ? '' : String(value))
+    ), template);
+}
+
 function getLastVisitTemplate(templateFile = LAST_VISIT_TEMPLATE_FILE) {
     if (!fs.existsSync(templateFile)) {
         return LAST_VISIT_DEFAULT_TEMPLATE;
@@ -21,12 +28,17 @@ function getLastVisitTemplate(templateFile = LAST_VISIT_TEMPLATE_FILE) {
 }
 
 function renderLastVisitTemplate(payload, templateFile = LAST_VISIT_TEMPLATE_FILE) {
-    let template = getLastVisitTemplate(templateFile);
-    template = template.replace(/\{\{name\}\}/g, payload.displayName || payload.name || 'Client');
-    template = template.replace(/\{\{lastVisitDate\}\}/g, payload.lastVisitDate || '');
-    template = template.replace(/\{\{daysSinceVisit\}\}/g, String(payload.daysSinceVisit || 7));
-    template = template.replace(/\{\{branch\}\}/g, payload.branch || '');
-    return template;
+    const outlet = resolveOutletContext(payload);
+    const template = getLastVisitTemplate(templateFile);
+
+    return replaceTemplateTokens(template, {
+        name: payload.displayName || payload.name || 'Client',
+        lastVisitDate: payload.lastVisitDate || '',
+        daysSinceVisit: String(payload.daysSinceVisit || 7),
+        branch: payload.branch || '',
+        outletName: outlet.name,
+        outletMapLink: outlet.mapLink
+    });
 }
 
 function processLastVisitCampaign(filePath) {

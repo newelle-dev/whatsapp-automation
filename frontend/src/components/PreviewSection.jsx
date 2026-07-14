@@ -1,12 +1,20 @@
 import { Play, Copy, Trash2, Edit3 } from 'lucide-react';
+import { isValidHttpUrl } from '../config/outlets';
 
 const PreviewSection = ({
   queues,
+  selectedOutlet,
+  sendDisabledReason,
+  canStartSending,
   onStartSending,
   onEditRecipientName,
   onToggleRecipientExclusion
 }) => {
   const activeCount = queues.sendingQueue.filter((item) => !item.isExcluded).length;
+  const excludedCount = queues.sendingQueue.length - activeCount;
+  const selectedOutletLabel = selectedOutlet?.name || 'No outlet selected';
+  const selectedOutletMapLink = selectedOutlet?.mapLink || '';
+  const outletHasValidMapLink = isValidHttpUrl(selectedOutletMapLink);
 
   const handleCopy = (message, index) => {
     navigator.clipboard.writeText(message);
@@ -25,15 +33,54 @@ const PreviewSection = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2>Preview Messages</h2>
-          <p className="subtitle">Generated messages ready for review. Edit a name or remove a recipient before you start sending.</p>
+          <p className="subtitle">Generated messages ready for review. Edit a name, remove a recipient, and confirm the selected outlet before you start sending.</p>
         </div>
         <button 
           className="btn" 
           onClick={onStartSending}
-          disabled={activeCount === 0}
+          disabled={!canStartSending}
+          title={sendDisabledReason || ''}
         >
           Start Sending ({activeCount}) <Play size={18} />
         </button>
+      </div>
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: '1rem',
+        alignItems: 'flex-start',
+        marginTop: '1rem',
+        padding: '1rem',
+        borderRadius: '14px',
+        border: '1px solid var(--glass-border)',
+        background: 'rgba(0,0,0,0.16)'
+      }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 600 }}>Selected outlet</p>
+          <h3 style={{ margin: '0.35rem 0 0.35rem' }}>{selectedOutletLabel}</h3>
+          <p style={{ margin: '0 0 0.75rem', color: outletHasValidMapLink ? 'var(--text-muted)' : '#fca5a5' }}>
+            {outletHasValidMapLink
+              ? <a href={selectedOutletMapLink} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Open map link</a>
+              : 'Map link missing for this outlet.'}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <span style={{ padding: '0.35rem 0.65rem', borderRadius: '999px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: '0.85rem', border: '1px solid var(--glass-border)' }}>
+              Active recipients: {activeCount}
+            </span>
+            <span style={{ padding: '0.35rem 0.65rem', borderRadius: '999px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: '0.85rem', border: '1px solid var(--glass-border)' }}>
+              Removed from send: {excludedCount}
+            </span>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', minWidth: '12rem' }}>
+          <p style={{ margin: 0, color: sendDisabledReason ? '#fca5a5' : 'var(--success)', fontSize: '0.875rem', fontWeight: 600 }}>
+            {sendDisabledReason ? 'Send blocked' : 'Ready to send'}
+          </p>
+          <p style={{ margin: '0.4rem 0 0', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            {sendDisabledReason || 'Selected outlet and rendered messages passed preflight.'}
+          </p>
+        </div>
       </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '2rem' }}>

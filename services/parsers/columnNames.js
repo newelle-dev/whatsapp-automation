@@ -2,7 +2,32 @@ const path = require('path');
 
 const TEMPLATE_FILE = path.join(__dirname, '..', '..', 'message-template.txt');
 const LAST_VISIT_TEMPLATE_FILE = path.join(__dirname, '..', '..', 'message-template-last-visit.txt');
-const DEFAULT_TEMPLATE = 'Hello {{name}}, this is a reminder for {{service}} on {{date}} at {{time}}.';
+const DEFAULT_TEMPLATE = `Hi {{name}},
+
+Greetings from {{outletName}}✨
+
+This is a friendly reminder of your upcoming appointment:
+
+📅 Date: {{day}}, {{date}}
+⏰ Time: {{time}}
+💇 Service: {{service}}
+
+To secure your slot, kindly reply:
+✔ Y – to confirm
+❌ NO – to cancel
+
+⏰ Please confirm. Unconfirmed slots may be released to clients on our waitlist.
+
+Location Reminder:
+🏢 {{outletName}}
+📍{{outletMapLink}}
+
+📣 As our stylists have limited availability during this period, your confirmation is greatly appreciated.
+
+Thank you and have a wonderful day! 😊
+
+Warm regards,
+176 Avenue ✨`;
 const LAST_VISIT_DEFAULT_TEMPLATE = `Hi {{name}},
 
 We're just checking in to see how your recent service experience was. We hope you're enjoying the results 😊

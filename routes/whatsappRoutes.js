@@ -12,7 +12,9 @@ function createWhatsAppRoutes({ state, io }) {
             return res.json({ status: 'initializing' });
         }
 
-        initializeWhatsApp({ state, io });
+        initializeWhatsApp({ state, io }).catch((error) => {
+            console.error('WhatsApp initialization failed:', error);
+        });
         res.json({ status: 'initializing' });
     });
 
