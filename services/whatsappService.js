@@ -65,11 +65,28 @@ function createWhatsAppClient() {
         puppeteerOptions.executablePath = executablePath;
     }
 
+    const authStrategy = new LocalAuth();
+
+    // Patch logout to prevent crash on Windows when session files are locked by Chromium or OneDrive sync
+    const originalLogout = authStrategy.logout.bind(authStrategy);
+    authStrategy.logout = async function () {
+        try {
+            await originalLogout();
+        } catch (error) {
+            console.warn(
+                'Warning: Failed to clear session directory during logout. This is common on Windows ' +
+                'when files are locked by the browser or cloud sync services (e.g. OneDrive). Error:',
+                error.message
+            );
+        }
+    };
+
     return new Client({
-        authStrategy: new LocalAuth(),
+        authStrategy: authStrategy,
         puppeteer: puppeteerOptions
     });
 }
+
 
 function isTransientInitializeError(error) {
     const message = String(error?.message || error || '');
