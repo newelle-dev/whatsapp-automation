@@ -55,10 +55,20 @@ function addSpawnUnknownHint(error) {
 
 function createWhatsAppClient() {
     const executablePath = resolveBrowserExecutablePath();
+    const protocolTimeout = Number(process.env.PUPPETEER_PROTOCOL_TIMEOUT || 0);
 
     const puppeteerOptions = {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        protocolTimeout: protocolTimeout,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+        ]
     };
 
     if (executablePath) {
@@ -83,7 +93,11 @@ function createWhatsAppClient() {
 
     return new Client({
         authStrategy: authStrategy,
-        puppeteer: puppeteerOptions
+        puppeteer: puppeteerOptions,
+        webVersionCache: {
+            type: 'remote',
+            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/{version}.html'
+        }
     });
 }
 
@@ -91,7 +105,14 @@ function createWhatsAppClient() {
 function isTransientInitializeError(error) {
     const message = String(error?.message || error || '');
 
-    return message.includes('Execution context was destroyed') || message.includes('most likely because of a navigation');
+    return (
+        message.includes('Execution context was destroyed') ||
+        message.includes('most likely because of a navigation') ||
+        message.includes('ProtocolError') ||
+        message.includes('timed out') ||
+        message.includes('Session closed') ||
+        message.includes('Target closed')
+    );
 }
 
 async function destroyWhatsAppClient(state) {
