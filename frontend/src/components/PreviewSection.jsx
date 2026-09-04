@@ -1,9 +1,11 @@
 import { Play, Copy, Trash2, Edit3, MapPin, ExternalLink, AlertTriangle, AlertCircle, CheckCircle2, UserCheck, UserMinus } from 'lucide-react';
-import { isValidHttpUrl } from '../config/outlets';
+import { isValidHttpUrl, OUTLET_OPTIONS } from '../config/outlets';
 
 const PreviewSection = ({
   queues,
   selectedOutlet,
+  selectedOutletKey,
+  setSelectedOutletKey,
   sendDisabledReason,
   canStartSending,
   templateWarnings,
@@ -54,6 +56,46 @@ const PreviewSection = ({
         >
           Start Sending ({activeCount}) <Play size={18} />
         </button>
+      </div>
+
+      {/* Location Selection Card */}
+      <div className="settings-card" style={{ marginBottom: '1.5rem' }}>
+        <label className="custom-select-label">
+          <span className="template-editor-label">Select Outlet Location</span>
+          <div className="select-wrapper">
+            <select
+              value={selectedOutletKey}
+              onChange={(event) => setSelectedOutletKey?.(event.target.value)}
+            >
+              {OUTLET_OPTIONS.map((outlet) => {
+                const outletReady = isValidHttpUrl(outlet.mapLink);
+                return (
+                  <option key={outlet.key} value={outlet.key}>
+                    {outlet.name}{outletReady ? '' : ' (map link missing)'}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </label>
+
+        {/* Outlet Validation Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+          {outletHasValidMapLink ? (
+            <div className="badge success">
+              <CheckCircle2 size={14} /> Map Link Validated
+            </div>
+          ) : (
+            <div className="badge error">
+              <AlertCircle size={14} /> Map Link Missing
+            </div>
+          )}
+          <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            {outletHasValidMapLink
+              ? `Messages will send with location "${selectedOutletLabel}" and its map link.`
+              : `Location "${selectedOutletLabel}" has an invalid/missing map link. Sending will be blocked.`}
+          </span>
+        </div>
       </div>
 
       <div className="preview-layout">

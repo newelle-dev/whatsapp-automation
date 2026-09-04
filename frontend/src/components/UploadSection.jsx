@@ -1,22 +1,15 @@
-import { ArrowRight, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import FileDropzone from './FileDropzone';
-import { OUTLET_OPTIONS, isValidHttpUrl } from '../config/outlets';
 
 const UploadSection = ({ 
   campaignMode,
   setCampaignMode,
-  selectedOutletKey,
-  setSelectedOutletKey,
-  selectedOutlet,
   apptsFile, 
   setApptsFile, 
   onProcess, 
   onShowModal 
 }) => {
   const isLastVisitCampaign = campaignMode === 'last-visit';
-  const selectedOutletLabel = selectedOutlet?.name || 'No outlet selected';
-  const selectedOutletMapLink = selectedOutlet?.mapLink || '';
-  const outletHasValidMapLink = isValidHttpUrl(selectedOutletMapLink);
 
   return (
     <div className="fade-in">
@@ -54,44 +47,6 @@ const UploadSection = ({
               </button>
             </div>
           </div>
-
-          {/* Outlet Selection */}
-          <label className="custom-select-label">
-            <span className="template-editor-label">Selected Outlet</span>
-            <div className="select-wrapper">
-              <select
-                value={selectedOutletKey}
-                onChange={(event) => setSelectedOutletKey?.(event.target.value)}
-              >
-                {OUTLET_OPTIONS.map((outlet) => {
-                  const outletReady = isValidHttpUrl(outlet.mapLink);
-                  return (
-                    <option key={outlet.key} value={outlet.key}>
-                      {outlet.name}{outletReady ? '' : ' (map link missing)'}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </label>
-        </div>
-
-        {/* Selected Outlet Status Indicators */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
-          {outletHasValidMapLink ? (
-            <div className="badge success">
-              <CheckCircle2 size={14} /> Map Link Validated
-            </div>
-          ) : (
-            <div className="badge error">
-              <AlertCircle size={14} /> Map Link Missing
-            </div>
-          )}
-          <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            {outletHasValidMapLink
-              ? `Messages will send with location "${selectedOutletLabel}" and its map link.`
-              : `Location "${selectedOutletLabel}" has an invalid/missing map link. Reprocessing will stay blocked.`}
-          </span>
         </div>
       </div>
 

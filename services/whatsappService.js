@@ -5,6 +5,7 @@ const path = require('path');
 
 const INITIALIZE_RETRY_DELAY_MS = 1500;
 const INITIALIZE_MAX_ATTEMPTS = 2;
+const INITIALIZE_TIMEOUT_MS = 120000; // 2 minutes timeout for initialization
 
 function firstExistingPath(candidates) {
     return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
@@ -56,6 +57,9 @@ function addSpawnUnknownHint(error) {
 function createWhatsAppClient() {
     const executablePath = resolveBrowserExecutablePath();
     const protocolTimeout = Number(process.env.PUPPETEER_PROTOCOL_TIMEOUT || 0);
+
+    console.log('[WhatsApp] Creating client with executablePath:', executablePath);
+    console.log('[WhatsApp] Protocol timeout (ms):', protocolTimeout);
 
     const puppeteerOptions = {
         headless: true,
@@ -133,17 +137,29 @@ async function destroyWhatsAppClient(state) {
     }
 }
 
+function withTimeout(promise, timeoutMs, errorMessage) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        )
+    ]);
+}
+
 function registerWhatsAppClientListeners(client, { state, io }) {
     client.on('qr', async (qr) => {
+        console.log('[WhatsApp] QR code received');
         try {
             const url = await qrcodeUrl.toDataURL(qr);
+            console.log('[WhatsApp] QR code emitted to client');
             io.emit('qr', url);
         } catch (e) {
-            console.error('QR code generation error', e);
+            console.error('[WhatsApp] QR code generation error', e);
         }
     });
 
     client.on('ready', () => {
+        console.log('[WhatsApp] Client ready event fired');
         if (state.whatsappClient === client) {
             state.isAuthReady = true;
         }
@@ -151,10 +167,12 @@ function registerWhatsAppClientListeners(client, { state, io }) {
     });
 
     client.on('authenticated', () => {
+        console.log('[WhatsApp] Authenticated event fired');
         io.emit('auth', 'authenticated');
     });
 
     client.on('auth_failure', () => {
+        console.log('[WhatsApp] Auth failure event fired');
         io.emit('auth', 'failed');
         state.isAuthReady = false;
 
@@ -164,6 +182,7 @@ function registerWhatsAppClientListeners(client, { state, io }) {
     });
 
     client.on('disconnected', () => {
+        console.log('[WhatsApp] Disconnected event fired');
         state.isAuthReady = false;
         io.emit('ready', false);
 
@@ -175,25 +194,34 @@ function registerWhatsAppClientListeners(client, { state, io }) {
 
 async function initializeWhatsApp({ state, io }) {
     if (state.whatsappInitPromise) {
+        console.log('[WhatsApp] Initialization already in progress');
         return state.whatsappInitPromise;
     }
 
     state.isAuthReady = false;
+    console.log('[WhatsApp] Starting initialization...');
 
     state.whatsappInitPromise = (async () => {
         for (let attempt = 1; attempt <= INITIALIZE_MAX_ATTEMPTS; attempt += 1) {
+            console.log(`[WhatsApp] Initialization attempt ${attempt}/${INITIALIZE_MAX_ATTEMPTS}`);
             const client = createWhatsAppClient();
             state.whatsappClient = client;
             registerWhatsAppClientListeners(client, { state, io });
 
             try {
-                await client.initialize();
+                console.log(`[WhatsApp] Calling client.initialize() with ${INITIALIZE_TIMEOUT_MS}ms timeout...`);
+                await withTimeout(
+                    client.initialize(),
+                    INITIALIZE_TIMEOUT_MS,
+                    `WhatsApp initialization timeout after ${INITIALIZE_TIMEOUT_MS / 1000} seconds. Browser may not have started or is unresponsive.`
+                );
+                console.log(`[WhatsApp] Client initialized successfully!`);
                 return client;
             } catch (error) {
                 const normalizedError = addSpawnUnknownHint(error);
                 const shouldRetry = isTransientInitializeError(error) && attempt < INITIALIZE_MAX_ATTEMPTS;
 
-                console.error(`WhatsApp initialization failed on attempt ${attempt}:`, normalizedError);
+                console.error(`[WhatsApp] Initialization failed on attempt ${attempt}:`, normalizedError);
                 await destroyWhatsAppClient(state);
 
                 if (!shouldRetry) {
@@ -203,6 +231,7 @@ async function initializeWhatsApp({ state, io }) {
                     throw normalizedError;
                 }
 
+                console.log(`[WhatsApp] Retrying in ${INITIALIZE_RETRY_DELAY_MS}ms...`);
                 await new Promise((resolve) => setTimeout(resolve, INITIALIZE_RETRY_DELAY_MS));
             }
         }

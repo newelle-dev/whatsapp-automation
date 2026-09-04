@@ -1,10 +1,11 @@
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 
 const serviceKeywords = {
-    'Hair': ['cut', 'color', 'root', 'balayage', 'wash & blow', 'hair', 'head spa', 'styling'],
-    'Lashes': ['lash', 'eyelash'],
-    'Brows': ['eyebrow', 'brow', 'embroidery'],
-    'Nails': ['manicure', 'pedicure', 'nail', 'gel color', 'gel polish']
+    'Hair': ['cut', 'color', 'root', 'balayage', 'wash & blow', 'head spa', 'styling'],
+    'EyeLashes': ['lash', 'eyelash', 'lash lift'],
+    'EyeBrows': ['eyebrow', 'brow'],
+    'Nails': ['manicure', 'pedicure', 'nail', 'gel color', 'gel polish'],
+    'Hair Removal': ['hair removal', 'wax', 'waxing', 'laser']
 };
 
 function simplifyService(serviceName) {

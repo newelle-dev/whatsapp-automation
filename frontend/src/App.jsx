@@ -87,9 +87,6 @@ function App() {
         <UploadSection 
           campaignMode={campaignMode}
           setCampaignMode={setCampaignMode}
-          selectedOutletKey={selectedOutletKey}
-          setSelectedOutletKey={setSelectedOutletKey}
-          selectedOutlet={selectedOutlet}
           apptsFile={apptsFile}
           setApptsFile={setApptsFile}
           onProcess={() => handleFileUpload()}
@@ -133,6 +130,8 @@ function App() {
         <PreviewSection 
           queues={queues}
           selectedOutlet={selectedOutlet}
+          selectedOutletKey={selectedOutletKey}
+          setSelectedOutletKey={setSelectedOutletKey}
           canStartSending={sendReadiness.canStartSending}
           sendDisabledReason={sendReadiness.reason}
           templateWarnings={templateWarnings}
